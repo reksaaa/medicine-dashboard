@@ -1,0 +1,19 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "mysql"
+    url      = env("DATABASE_URL")
+}
+
+model Medicine {
+    id                 Int      @id @default(autoincrement())
+    medicine_name      String
+    medicine_type      String
+    quantity           Float
+    transaction_status String
+    stock_status       String
+    delivery_batch     String
+    expiry_date        DateTime
+}
