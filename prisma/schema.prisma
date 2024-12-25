@@ -16,4 +16,13 @@ model Medicine {
     stock_status       String
     delivery_batch     String
     expiry_date        DateTime
+    created_by         String
+}
+
+model DataDashboard {
+    id              Int   @id @default(autoincrement())
+    lowest_demand   Float
+    slowest_moving  Float
+    top_distributed Float
+    highest_demand  Float
 }
