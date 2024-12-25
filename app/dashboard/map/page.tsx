@@ -1,5 +1,5 @@
 import MapPage from "@/components/map/MapPage";
-import TestComponent from "@/components/test-component";
+
 import { Card } from "@/components/ui/card";
 import prisma from "@/lib/prisma";
 import React from "react";
