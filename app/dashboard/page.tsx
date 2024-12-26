@@ -1,17 +1,46 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Boxes, ListTodo, PieChart, ShoppingCart } from "lucide-react";
+import { Boxes, ListTodo, PieChart, ShoppingCart } from 'lucide-react';
 import prisma from "@/lib/prisma";
+import { StockChart } from "@/components/stock-chart";
 
 export default async function DashboardPage() {
-  const data = await prisma.dataDashboard.findUnique({
+  const dataDashboard = await prisma.dataDashboard.findUnique({
     where: {
       id: 1,
     },
   });
 
-  console.log(data);
+  const medicines = await prisma.medicine.findMany({
+    select: {
+      id: true,
+      medicine_name: true,
+    },
+  });
+
+  const distributionCenters = await prisma.distributionCenter.findMany();
+
+  const stockLevels = await prisma.stockLevel.findMany({
+    include: {
+      medicine: true,
+      distributionCenter: true,
+    },
+  });
+
+  const stockData = distributionCenters.map((center) => {
+    const centerData: any = { location: center.name };
+    medicines.forEach((medicine) => {
+      const stockLevel = stockLevels.find(
+        (sl) => sl.medicineId === medicine.id && sl.distributionCenterId === center.id
+      );
+      centerData[medicine.medicine_name] = stockLevel ? stockLevel.quantity : 0;
+    });
+    return centerData;
+  });
+
+  const medicineNames = medicines.map((m) => m.medicine_name);
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       <main className="flex-1">
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
           <div className="flex items-start justify-between">
@@ -28,12 +57,12 @@ export default async function DashboardPage() {
                 <CardTitle className="text-base font-medium">
                   Lowest Demand
                 </CardTitle>
-                <PieChart className="h-8 w-8 text-teal-500" />
+                <PieChart className="h-8 w-8 text-teal-500" aria-hidden="true" />
               </CardHeader>
               <CardContent className="pt-1">
-                <div className="text-2xl font-bold">Med1</div>
+                <div className="text-2xl font-bold">{dataDashboard?.lowest_demand || 'N/A'}</div>
                 <p className="text-xs text-muted-foreground">
-                  {data?.lowest_demand}
+                  Lowest demand medicine
                 </p>
               </CardContent>
             </Card>
@@ -42,12 +71,12 @@ export default async function DashboardPage() {
                 <CardTitle className="text-base font-medium">
                   Slowest Moving
                 </CardTitle>
-                <ShoppingCart className="h-8 w-8 text-teal-500" />
+                <ShoppingCart className="h-8 w-8 text-teal-500" aria-hidden="true" />
               </CardHeader>
               <CardContent className="pt-1">
-                <div className="text-2xl font-bold">Med3</div>
+                <div className="text-2xl font-bold">{dataDashboard?.slowest_moving || 'N/A'}</div>
                 <p className="text-xs text-muted-foreground">
-                  {data?.slowest_moving}
+                  Slowest moving medicine
                 </p>
               </CardContent>
             </Card>
@@ -56,12 +85,12 @@ export default async function DashboardPage() {
                 <CardTitle className="text-base font-medium">
                   Top Distributed
                 </CardTitle>
-                <Boxes className="h-8 w-8 text-teal-500" />
+                <Boxes className="h-8 w-8 text-teal-500" aria-hidden="true" />
               </CardHeader>
               <CardContent className="pt-1">
-                <div className="text-2xl font-bold">Med3</div>
+                <div className="text-2xl font-bold">{dataDashboard?.top_distributed || 'N/A'}</div>
                 <p className="text-xs text-muted-foreground">
-                  {data?.top_distributed}
+                  Most distributed medicine
                 </p>
               </CardContent>
             </Card>
@@ -70,19 +99,20 @@ export default async function DashboardPage() {
                 <CardTitle className="text-base font-medium">
                   Highest Demand
                 </CardTitle>
-                <ListTodo className="h-8 w-8 text-teal-500" />
+                <ListTodo className="h-8 w-8 text-teal-500" aria-hidden="true" />
               </CardHeader>
               <CardContent className="pt-1">
-                <div className="text-2xl font-bold">Med3</div>
+                <div className="text-2xl font-bold">{dataDashboard?.highest_demand || 'N/A'}</div>
                 <p className="text-xs text-muted-foreground">
-                  {data?.highest_demand}
+                  Highest demand medicine
                 </p>
               </CardContent>
             </Card>
           </div>
-          {/* <StockChart /> */}
+          <StockChart data={stockData} medicines={medicineNames} />
         </div>
       </main>
     </div>
   );
 }
+

@@ -23,49 +23,66 @@ import {
 
 // Fix Leaflet default icon
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
 // Custom icons
 const defaultIcon = new Icon({
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
   iconSize: [30, 50],
   iconAnchor: [20, 50],
   popupAnchor: [0, -45],
 });
 
 const criticalIcon = new Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
   iconSize: [30, 50],
   iconAnchor: [20, 50],
   popupAnchor: [0, -45],
 });
 
-// Define marker locations
-const markerPositions: LatLngExpression[] = [
-  [-6.2088, 106.8456],
-  [-6.2000, 106.8400],
-  [-6.2100, 106.8500],
-];
+// Types from Prisma schema
+interface Medicine {
+  id: number;
+  medicine_name: string;
+  medicine_type: string;
+  quantity: number;
+  transaction_status: string;
+  stock_status: string;
+  delivery_batch: string;
+  expiry_date: Date;
+  created_by: string;
+}
 
-const markerNames = [
-  "Distribution Center A",
-  "Distribution Center B",
-  "Distribution Center C",
-];
+interface DistributionCenter {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
+interface MapPageProps {
+  medicines: Medicine[];
+  distributionCenters: DistributionCenter[];
+}
 
 // Custom marker component
-function CustomMarker({ 
-  position, 
+function CustomMarker({
+  position,
   name,
-  isCritical, 
-  onClick 
-}: { 
-  position: LatLngExpression; 
+  isCritical,
+  onClick,
+}: {
+  position: LatLngExpression;
   name: string;
-  isCritical: boolean; 
+  isCritical: boolean;
   onClick: () => void;
 }) {
   const map = useMap();
@@ -97,42 +114,16 @@ function CustomMarker({
   );
 }
 
-// Dummy Medicine Data
-const medicines = [
-  {
-    name: "Paracetamol",
-    type: "Tablet",
-    quantity: 100,
-    status: "Incoming",
-    stockStatus: "Normal",
-    batch: "Batch 1",
-    expiry: "2025-01-01",
-  },
-  {
-    name: "Amoxicillin",
-    type: "Capsule",
-    quantity: 20,
-    status: "Outgoing",
-    stockStatus: "Low Stock",
-    batch: "Batch 2",
-    expiry: "2024-09-15",
-  },
-  {
-    name: "Ibuprofen",
-    type: "Tablet",
-    quantity: 150,
-    status: "Incoming",
-    stockStatus: "Normal",
-    batch: "Batch 3",
-    expiry: "2025-03-20",
-  },
-];
-
-export default function MapPage() {
+export default function MapPage({
+  medicines,
+  distributionCenters,
+}: MapPageProps) {
   const [entries, setEntries] = useState<string>("10");
   const [filterBy, setFilterBy] = useState<string>("");
   const [selectedMarker, setSelectedMarker] = useState<number | null>(null);
-  const [criticalMarkers, setCriticalMarkers] = useState<boolean[]>(new Array(markerPositions.length).fill(false));
+  const [criticalMarkers, setCriticalMarkers] = useState<boolean[]>(
+    new Array(distributionCenters.length).fill(false)
+  );
 
   const handleMarkerClick = (index: number) => {
     setSelectedMarker(index);
@@ -140,29 +131,64 @@ export default function MapPage() {
 
   const handleHighlightCritical = () => {
     if (selectedMarker !== null) {
-      setCriticalMarkers(prev => {
+      setCriticalMarkers((prev) => {
         const newCriticalMarkers = [...prev];
-        newCriticalMarkers[selectedMarker] = !newCriticalMarkers[selectedMarker];
+        newCriticalMarkers[selectedMarker] =
+          !newCriticalMarkers[selectedMarker];
         return newCriticalMarkers;
       });
     }
   };
+
+  // Filter medicines based on selected filter
+  const filteredMedicines = useMemo(() => {
+    let filtered = [...medicines];
+
+    switch (filterBy) {
+      case "expiry":
+        filtered.sort(
+          (a, b) => a.expiry_date.getTime() - b.expiry_date.getTime()
+        );
+        break;
+      case "incoming":
+        filtered = filtered.filter((m) => m.transaction_status === "Incoming");
+        break;
+      case "outgoing":
+        filtered = filtered.filter((m) => m.transaction_status === "Outgoing");
+        break;
+      case "quantityLowToHigh":
+        filtered.sort((a, b) => a.quantity - b.quantity);
+        break;
+      case "quantityHighToLow":
+        filtered.sort((a, b) => b.quantity - a.quantity);
+        break;
+    }
+
+    return filtered;
+  }, [medicines, filterBy]);
 
   return (
     <div className="p-8">
       {/* Map Section */}
       <div className="rounded-lg border bg-white">
         <MapContainer
-          center={[-6.2088, 106.8456] as LatLngExpression}
+          center={
+            distributionCenters[0]
+              ? [
+                  distributionCenters[0].latitude,
+                  distributionCenters[0].longitude,
+                ]
+              : ([-6.2088, 106.8456] as LatLngExpression)
+          }
           zoom={13}
           className="h-[400px] w-full rounded-lg"
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {markerPositions.map((position, index) => (
+          {distributionCenters.map((center, index) => (
             <CustomMarker
-              key={index}
-              position={position}
-              name={markerNames[index]}
+              key={center.id}
+              position={[center.latitude, center.longitude]}
+              name={center.name}
               isCritical={criticalMarkers[index]}
               onClick={() => handleMarkerClick(index)}
             />
@@ -175,7 +201,6 @@ export default function MapPage() {
         {/* Controls */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            {/* Show Entries Dropdown */}
             <span className="font-bold text-gray-700">Show</span>
             <Select value={entries} onValueChange={setEntries}>
               <SelectTrigger className="w-16">
@@ -189,7 +214,6 @@ export default function MapPage() {
             </Select>
             <span className="font-bold text-gray-700">entries</span>
 
-            {/* Filter Dropdown */}
             <Select value={filterBy} onValueChange={setFilterBy}>
               <SelectTrigger className="w-60 ml-6">
                 <SelectValue placeholder="Filter by..." />
@@ -212,8 +236,7 @@ export default function MapPage() {
             </Select>
           </div>
           <div>
-            {/* Highlight Critical Button */}
-            <Button 
+            <Button
               className="bg-teal-600 text-white hover:bg-teal-700"
               onClick={handleHighlightCritical}
               disabled={selectedMarker === null}
@@ -238,15 +261,17 @@ export default function MapPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {medicines.map((medicine, index) => (
-                <TableRow key={index}>
-                  <TableCell>{medicine.name}</TableCell>
-                  <TableCell>{medicine.type}</TableCell>
+              {filteredMedicines.slice(0, parseInt(entries)).map((medicine) => (
+                <TableRow key={medicine.id}>
+                  <TableCell>{medicine.medicine_name}</TableCell>
+                  <TableCell>{medicine.medicine_type}</TableCell>
                   <TableCell>{medicine.quantity}</TableCell>
-                  <TableCell>{medicine.status}</TableCell>
-                  <TableCell>{medicine.stockStatus}</TableCell>
-                  <TableCell>{medicine.batch}</TableCell>
-                  <TableCell>{medicine.expiry}</TableCell>
+                  <TableCell>{medicine.transaction_status}</TableCell>
+                  <TableCell>{medicine.stock_status}</TableCell>
+                  <TableCell>{medicine.delivery_batch}</TableCell>
+                  <TableCell>
+                    {medicine.expiry_date.toLocaleDateString()}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -256,4 +281,3 @@ export default function MapPage() {
     </div>
   );
 }
-

@@ -13,13 +13,13 @@ import {
 
 const menuItems = [
   { name: "Dashboard", icon: LayoutGrid, href: "/dashboard" },
-  { name: "Map", icon: Map, href: "/map" },
+  { name: "Map", icon: Map, href: "/dashboard/map" },
   { name: "Stock Forecast", icon: BarChart2, href: "/stock-forecast" },
   { name: "Disease Trend", icon: Activity, href: "/disease-trend" },
 ];
 
 const settingsItems = [
-  { name: "Profile", icon: User, href: "/profile" },
+  { name: "Profile", icon: User, href: "/dashboard/profile" },
   { name: "Logout", icon: LogOut, href: "/logout" },
 ];
 
@@ -27,7 +27,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-64 flex-col bg-teal-600 text-white">
+    <aside className="sticky top-0 flex min-h-screen w-64 flex-col bg-teal-600 text-white overflow-y-auto">
       <div className="p-4">
         <h1 className="text-4xl font-bold">
           <span className="text-white">Si</span>

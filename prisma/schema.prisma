@@ -17,6 +17,18 @@ model Medicine {
     delivery_batch     String
     expiry_date        DateTime
     created_by         String
+    stockLevels        StockLevel[]
+}
+model StockLevel {
+    id                    Int               @id @default(autoincrement())
+    medicine              Medicine          @relation(fields: [medicineId], references: [id])
+    medicineId            Int
+    distributionCenter    DistributionCenter @relation(fields: [distributionCenterId], references: [id])
+    distributionCenterId  Int
+    quantity              Float
+    updatedAt             DateTime          @updatedAt
+
+    @@unique([medicineId, distributionCenterId])
 }
 
 model DataDashboard {
@@ -25,4 +37,12 @@ model DataDashboard {
     slowest_moving  Float
     top_distributed Float
     highest_demand  Float
+}
+
+model DistributionCenter {
+    id        Int      @id @default(autoincrement())
+    name      String
+    latitude  Float
+    longitude Float
+    stockLevels StockLevel[]
 }
