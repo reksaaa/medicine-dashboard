@@ -2,14 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutGrid,
-  Map,
-  BarChart2,
-  Activity,
-  User,
-  LogOut,
-} from "lucide-react";
+import { LayoutGrid, Map, BarChart2, Activity, User, LogOut } from 'lucide-react';
+import { signOut } from "next-auth/react";
 
 const menuItems = [
   { name: "Dashboard", icon: LayoutGrid, href: "/dashboard" },
@@ -20,7 +14,6 @@ const menuItems = [
 
 const settingsItems = [
   { name: "Profile", icon: User, href: "/dashboard/profile" },
-  { name: "Logout", icon: LogOut, href: "/logout" },
 ];
 
 export function Sidebar() {
@@ -63,15 +56,27 @@ export function Sidebar() {
             <li key={item.name}>
               <Link
                 href={item.href}
-                className="flex items-center rounded-lg px-2 py-2 text-base font-semibold hover:bg-teal-700"
+                className={`flex items-center rounded-lg px-2 py-2 text-base font-semibold hover:bg-teal-700 ${
+                  pathname === item.href ? "bg-teal-700" : ""
+                }`}
               >
                 <item.icon className="mr-3 h-5 w-5" />
                 {item.name}
               </Link>
             </li>
           ))}
+          <li>
+            <div
+              onClick={() => signOut()}
+              className="flex items-center rounded-lg px-2 py-2 text-base font-semibold hover:bg-teal-700 cursor-pointer"
+            >
+              <LogOut className="mr-3 h-5 w-5" />
+              Logout
+            </div>
+          </li>
         </ul>
       </div>
     </aside>
   );
 }
+

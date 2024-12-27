@@ -1,53 +1,22 @@
 "use client";
 
-import * as React from "react";
-import { X } from "lucide-react";
+import React, { useState, useMemo } from 'react';
+import { Chart } from 'react-google-charts';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Legend,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
+import { X } from 'lucide-react';
 import { DistributionCenter, Medicine, StockLevel } from "@prisma/client";
 
-interface StockChartProps {
-  stockLevel: (StockLevel & {
-    distribution: DistributionCenter;
-    medicines: Medicine;
+interface TestProps {
+  stock: (StockLevel & {
+    medicine: Medicine;
+    distributionCenter: DistributionCenter;
   })[];
 }
 
-function FilterBadge({
-  label,
-  onRemove,
-}: {
-  label: string;
-  onRemove: () => void;
-}) {
+function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
     <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border rounded-full shadow-sm">
       <button
@@ -62,21 +31,21 @@ function FilterBadge({
   );
 }
 
-export function StockChart({ stockLevel }: StockChartProps) {
-  const [selectedLocations, setSelectedLocations] = React.useState<DistributionCenter[]>([]);
-  const [selectedMedicines, setSelectedMedicines] = React.useState<Medicine[]>([]);
-  const [locationSearch, setLocationSearch] = React.useState("");
-  const [medicineSearch, setMedicineSearch] = React.useState("");
-  const [locationOpen, setLocationOpen] = React.useState(false);
-  const [medicineOpen, setMedicineOpen] = React.useState(false);
+const Test = ({ stock }: TestProps) => {
+  const [selectedLocations, setSelectedLocations] = useState<DistributionCenter[]>([]);
+  const [selectedMedicines, setSelectedMedicines] = useState<Medicine[]>([]);
+  const [locationSearch, setLocationSearch] = useState("");
+  const [medicineSearch, setMedicineSearch] = useState("");
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [medicineOpen, setMedicineOpen] = useState(false);
 
-  const locations = React.useMemo(() => {
-    return Array.from(new Set(stockLevel.map(sl => sl.distribution)));
-  }, [stockLevel]);
+  const locations = useMemo(() => {
+    return Array.from(new Set(stock.map(item => item.distributionCenter)));
+  }, [stock]);
 
-  const medicines = React.useMemo(() => {
-    return Array.from(new Set(stockLevel.map(sl => sl.medicines)));
-  }, [stockLevel]);
+  const medicines = useMemo(() => {
+    return Array.from(new Set(stock.map(item => item.medicine)));
+  }, [stock]);
 
   const addLocation = (location: DistributionCenter) => {
     if (!selectedLocations.some(l => l.id === location.id)) {
@@ -102,69 +71,70 @@ export function StockChart({ stockLevel }: StockChartProps) {
     setSelectedMedicines(selectedMedicines.filter((m) => m.id !== medicine.id));
   };
 
-  const filteredData = React.useMemo(() => {
-    let filteredStockLevels = stockLevel;
+  const filteredData = useMemo(() => {
+    let filteredStock = stock;
 
     if (selectedLocations.length > 0) {
-      filteredStockLevels = filteredStockLevels.filter(sl =>
-        selectedLocations.some(location => location.id === sl.distribution.id)
+      filteredStock = filteredStock.filter(item =>
+        selectedLocations.some(location => location.id === item.distributionCenter.id)
       );
     }
 
     if (selectedMedicines.length > 0) {
-      filteredStockLevels = filteredStockLevels.filter(sl =>
-        selectedMedicines.some(medicine => medicine.id === sl.distribution.id)
+      filteredStock = filteredStock.filter(item =>
+        selectedMedicines.some(medicine => medicine.id === item.medicine.id)
       );
     }
 
-    interface ChartDataPoint {
-      name: string;
-      [key: string]: string | number;
-    }
-
-    const groupedData = filteredStockLevels.reduce((acc, sl) => {
-      const locationName = sl.distribution.name;
+    const groupedData = filteredStock.reduce((acc, item) => {
+      const locationName = item.distributionCenter.name;
       if (!acc[locationName]) {
-        acc[locationName] = { name: locationName };
+        acc[locationName] = { Location: locationName };
       }
-      acc[locationName][sl.medicines.medicine_name] = sl.quantity;
+      acc[locationName][item.medicine.medicine_name] = item.quantity;
       return acc;
-    }, {} as Record<string, ChartDataPoint>);
+    }, {} as Record<string, { [key: string]: string | number }>);
 
-    return Object.values(groupedData);
-  }, [stockLevel, selectedLocations, selectedMedicines]);
+    const chartData = [
+      ['Location', ...medicines.map(m => m.medicine_name)],
+      ...Object.values(groupedData).map(row => 
+        [row.Location, ...medicines.map(m => row[m.medicine_name] || 0)]
+      )
+    ];
 
-  const medicineList = React.useMemo(() => {
-    if (selectedMedicines.length === 0) return medicines;
-    return selectedMedicines;
-  }, [selectedMedicines, medicines]);
+    return chartData;
+  }, [stock, selectedLocations, selectedMedicines, medicines]);
+
+  const options = {
+    chart: {
+      title: 'Medicine Stock Levels',
+      subtitle: 'Current stock levels across distribution centers',
+    },
+    bars: 'vertical',
+    hAxis: {
+      title: 'Location',
+    },
+    vAxis: {
+      title: 'Quantity',
+    },
+  };
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Medicine Stock Levels</CardTitle>
+        <CardTitle>Medicine Stock Levels by Location</CardTitle>
         <CardDescription>Current stock levels across distribution centers</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="md:col-span-3">
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={filteredData}>
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <CartesianGrid strokeDasharray="3 3" />
-                {medicineList.map((medicine) => (
-                  <Bar
-                    key={medicine.id}
-                    dataKey={medicine.quantity}
-                    name={medicine.medicine_name}
-                    fill={`hsl(${medicine.id * 100 % 360}, 70%, 50%)`}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+            <Chart
+              chartType="ColumnChart"
+              width="100%"
+              height="400px"
+              data={filteredData}
+              options={options}
+            />
           </div>
           <div className="space-y-8">
             <div className="space-y-4">
@@ -305,4 +275,7 @@ export function StockChart({ stockLevel }: StockChartProps) {
       </CardContent>
     </Card>
   );
-}
+};
+
+export default Test;
+

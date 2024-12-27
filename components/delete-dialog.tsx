@@ -13,19 +13,23 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { signOut } from "next-auth/react";
+import { deleteUser } from "@/lib/actions/user";
 
 interface DeleteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  email: string;
 }
 
-export function DeleteDialog({ open, onOpenChange }: DeleteDialogProps) {
+export function DeleteDialog({ open, onOpenChange, email }: DeleteDialogProps) {
   const [isPending, setIsPending] = useState(false);
 
   async function handleDelete() {
     setIsPending(true);
     try {
-      // await deleteAccount();
+      signOut()
+      await deleteUser(email);
       toast({
         title: "Account deleted",
         description: "Your account has been deleted successfully.",

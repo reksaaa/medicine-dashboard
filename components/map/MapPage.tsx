@@ -170,7 +170,7 @@ export default function MapPage({
   return (
     <div className="p-8">
       {/* Map Section */}
-      <div className="rounded-lg border bg-white">
+      <div className="rounded-lg border bg-white relative z-0">
         <MapContainer
           center={
             distributionCenters[0]
@@ -197,13 +197,13 @@ export default function MapPage({
       </div>
 
       {/* Controls and Table Section */}
-      <div className="mt-8 space-y-4">
+      <div className="mt-8 space-y-4 relative z-50">
         {/* Controls */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <span className="font-bold text-gray-700">Show</span>
             <Select value={entries} onValueChange={setEntries}>
-              <SelectTrigger className="w-16">
+              <SelectTrigger className="w-16 relative z-[60]">
                 <SelectValue>{entries}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -215,23 +215,15 @@ export default function MapPage({
             <span className="font-bold text-gray-700">entries</span>
 
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger className="w-60 ml-6">
+              <SelectTrigger className="w-60 relative z-[60]">
                 <SelectValue placeholder="Filter by..." />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent side="bottom" align="start" className="z-[1000]">
                 <SelectItem value="expiry">Expiry Date</SelectItem>
-                <SelectItem value="incoming">
-                  Transaction Status: Incoming
-                </SelectItem>
-                <SelectItem value="outgoing">
-                  Transaction Status: Outgoing
-                </SelectItem>
-                <SelectItem value="quantityLowToHigh">
-                  Quantity: Low to High
-                </SelectItem>
-                <SelectItem value="quantityHighToLow">
-                  Quantity: High to Low
-                </SelectItem>
+                <SelectItem value="incoming">Transaction Status: Incoming</SelectItem>
+                <SelectItem value="outgoing">Transaction Status: Outgoing</SelectItem>
+                <SelectItem value="quantityLowToHigh">Quantity: Low to High</SelectItem>
+                <SelectItem value="quantityHighToLow">Quantity: High to Low</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -281,3 +273,4 @@ export default function MapPage({
     </div>
   );
 }
+

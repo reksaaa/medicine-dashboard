@@ -1,14 +1,15 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "mysql"
-    url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Medicine {
-    id                 Int      @id @default(autoincrement())
+    id                 Int          @id @default(autoincrement())
     medicine_name      String
     medicine_type      String
     quantity           Float
@@ -19,14 +20,15 @@ model Medicine {
     created_by         String
     stockLevels        StockLevel[]
 }
+
 model StockLevel {
-    id                    Int               @id @default(autoincrement())
-    medicine              Medicine          @relation(fields: [medicineId], references: [id])
-    medicineId            Int
-    distributionCenter    DistributionCenter @relation(fields: [distributionCenterId], references: [id])
-    distributionCenterId  Int
-    quantity              Float
-    updatedAt             DateTime          @updatedAt
+    id                   Int                @id @default(autoincrement())
+    medicine             Medicine           @relation(fields: [medicineId], references: [id])
+    medicineId           Int
+    distributionCenter   DistributionCenter @relation(fields: [distributionCenterId], references: [id])
+    distributionCenterId Int
+    quantity             Float
+    updatedAt            DateTime           @updatedAt
 
     @@unique([medicineId, distributionCenterId])
 }
@@ -40,9 +42,16 @@ model DataDashboard {
 }
 
 model DistributionCenter {
-    id        Int      @id @default(autoincrement())
-    name      String
-    latitude  Float
-    longitude Float
+    id          Int          @id @default(autoincrement())
+    name        String
+    latitude    Float
+    longitude   Float
     stockLevels StockLevel[]
+}
+
+model User {
+    id       Int    @id @default(autoincrement())
+    name     String
+    password String
+    email    String @unique
 }

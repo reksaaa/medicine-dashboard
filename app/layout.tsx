@@ -1,10 +1,12 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
+import { Providers } from "./providers";
+import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({
-  subsets:['latin'],
-  weight:['400', '600', '700']
-})
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+});
 
 export default function RootLayout({
   children,
@@ -14,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.className}>
       <body>
-        <main className="flex-1 overflow-auto">{children}</main>
+        <Providers>
+          <main className="flex-1 overflow-auto">{children}</main>
+        </Providers>
+        <Toaster />
       </body>
     </html>
   );

@@ -6,16 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmailDialog } from "@/components/email-dialog";
 import { DeleteDialog } from "@/components/delete-dialog";
+import { User } from "@prisma/client";
 
-export default function ProfilePage() {
+interface ProfilePageProps {
+  user: User;
+}
+
+export default function ProfilePage({ user }: ProfilePageProps) {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  // In a real app, you would fetch this data from your backend
-  const defaultValues = {
-    name: "John Doe",
-    email: "john@example.com",
-  };
 
   return (
     <div className="w-full p-6 font-inter">
@@ -34,7 +33,7 @@ export default function ProfilePage() {
             </Label>
             <Input
               id="name"
-              defaultValue={defaultValues.name}
+              defaultValue={user.name}
               placeholder="Your name"
               className="font-inter w-full rounded-xl"
             />
@@ -49,7 +48,7 @@ export default function ProfilePage() {
             </Label>
             <Input
               id="email"
-              defaultValue={defaultValues.email}
+              defaultValue={user.email}
               placeholder="Your email"
               className="font-inter text-xl w-full rounded-xl"
             />
@@ -77,12 +76,13 @@ export default function ProfilePage() {
       <EmailDialog
         open={emailDialogOpen}
         onOpenChange={setEmailDialogOpen}
-        currentEmail={defaultValues.email}
+        currentEmail={user.email}
       />
 
       <DeleteDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
+        email={user.email}
       />
     </div>
   );

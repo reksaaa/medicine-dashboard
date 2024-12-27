@@ -15,12 +15,12 @@ export default async function MapLayout() {
   const distributionCenters = await prisma.distributionCenter.findMany();
 
   return (
-    <Card className="flex flex-1 flex-col gap-4 p-4 pt-0">
-      <MapPage 
-        medicines={medicines} 
-        distributionCenters={distributionCenters} 
-      />
-    </Card>
+    <Card className="m-4 h-full">
+    <MapPage 
+      medicines={medicines} 
+      distributionCenters={distributionCenters} 
+    />
+  </Card>
   );
 }
 
