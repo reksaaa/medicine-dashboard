@@ -7,8 +7,8 @@ export default async function MapLayout() {
   // Fetch all medicines
   const medicines = await prisma.medicine.findMany({
     orderBy: {
-      medicine_name: 'asc'
-    }
+      medicine_name: "asc",
+    },
   });
 
   // Fetch distribution centers
@@ -16,11 +16,7 @@ export default async function MapLayout() {
 
   return (
     <Card className="m-4 h-full">
-    <MapPage 
-      medicines={medicines} 
-      distributionCenters={distributionCenters} 
-    />
-  </Card>
+      <MapPage distributionCenters={distributionCenters} />
+    </Card>
   );
 }
-

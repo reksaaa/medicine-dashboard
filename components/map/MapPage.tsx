@@ -20,6 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { findMedicine } from "@/lib/actions/medicine";
+import { Loader2 } from "lucide-react";
+import { Result } from "postcss";
 
 // Fix Leaflet default icon
 L.Icon.Default.mergeOptions({
@@ -69,7 +72,6 @@ interface DistributionCenter {
 }
 
 interface MapPageProps {
-  medicines: Medicine[];
   distributionCenters: DistributionCenter[];
 }
 
@@ -114,19 +116,28 @@ function CustomMarker({
   );
 }
 
-export default function MapPage({
-  medicines,
-  distributionCenters,
-}: MapPageProps) {
+export default function MapPage({ distributionCenters }: MapPageProps) {
   const [entries, setEntries] = useState<string>("10");
   const [filterBy, setFilterBy] = useState<string>("");
+  const [medicineData, setMedicineData] = useState<any>();
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedMarker, setSelectedMarker] = useState<number | null>(null);
   const [criticalMarkers, setCriticalMarkers] = useState<boolean[]>(
     new Array(distributionCenters.length).fill(false)
   );
 
-  const handleMarkerClick = (index: number) => {
-    setSelectedMarker(index);
+  const handleMarkerClick = async (index: number) => {
+    setIsLoading(true);
+    try {
+      const result = await findMedicine(1);
+      console.log(result);
+      setMedicineData(result);
+    } catch {
+      setIsLoading(false);
+    } finally {
+      setIsLoading(false); // Ensure loading indicator is stopped regardless of success or failure
+    }
   };
 
   const handleHighlightCritical = () => {
@@ -141,31 +152,31 @@ export default function MapPage({
   };
 
   // Filter medicines based on selected filter
-  const filteredMedicines = useMemo(() => {
-    let filtered = [...medicines];
+  // const filteredMedicines = useMemo(() => {
+  //   let filtered = [...medicines];
 
-    switch (filterBy) {
-      case "expiry":
-        filtered.sort(
-          (a, b) => a.expiry_date.getTime() - b.expiry_date.getTime()
-        );
-        break;
-      case "incoming":
-        filtered = filtered.filter((m) => m.transaction_status === "Incoming");
-        break;
-      case "outgoing":
-        filtered = filtered.filter((m) => m.transaction_status === "Outgoing");
-        break;
-      case "quantityLowToHigh":
-        filtered.sort((a, b) => a.quantity - b.quantity);
-        break;
-      case "quantityHighToLow":
-        filtered.sort((a, b) => b.quantity - a.quantity);
-        break;
-    }
+  //   switch (filterBy) {
+  //     case "expiry":
+  //       filtered.sort(
+  //         (a, b) => a.expiry_date.getTime() - b.expiry_date.getTime()
+  //       );
+  //       break;
+  //     case "incoming":
+  //       filtered = filtered.filter((m) => m.transaction_status === "Incoming");
+  //       break;
+  //     case "outgoing":
+  //       filtered = filtered.filter((m) => m.transaction_status === "Outgoing");
+  //       break;
+  //     case "quantityLowToHigh":
+  //       filtered.sort((a, b) => a.quantity - b.quantity);
+  //       break;
+  //     case "quantityHighToLow":
+  //       filtered.sort((a, b) => b.quantity - a.quantity);
+  //       break;
+  //   }
 
-    return filtered;
-  }, [medicines, filterBy]);
+  //   return filtered;
+  // }, [medicines, filterBy]);
 
   return (
     <div className="p-8">
@@ -220,10 +231,18 @@ export default function MapPage({
               </SelectTrigger>
               <SelectContent side="bottom" align="start" className="z-[1000]">
                 <SelectItem value="expiry">Expiry Date</SelectItem>
-                <SelectItem value="incoming">Transaction Status: Incoming</SelectItem>
-                <SelectItem value="outgoing">Transaction Status: Outgoing</SelectItem>
-                <SelectItem value="quantityLowToHigh">Quantity: Low to High</SelectItem>
-                <SelectItem value="quantityHighToLow">Quantity: High to Low</SelectItem>
+                <SelectItem value="incoming">
+                  Transaction Status: Incoming
+                </SelectItem>
+                <SelectItem value="outgoing">
+                  Transaction Status: Outgoing
+                </SelectItem>
+                <SelectItem value="quantityLowToHigh">
+                  Quantity: Low to High
+                </SelectItem>
+                <SelectItem value="quantityHighToLow">
+                  Quantity: High to Low
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -252,25 +271,34 @@ export default function MapPage({
                 <TableHead>Expiry Date</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {filteredMedicines.slice(0, parseInt(entries)).map((medicine) => (
-                <TableRow key={medicine.id}>
-                  <TableCell>{medicine.medicine_name}</TableCell>
-                  <TableCell>{medicine.medicine_type}</TableCell>
-                  <TableCell>{medicine.quantity}</TableCell>
-                  <TableCell>{medicine.transaction_status}</TableCell>
-                  <TableCell>{medicine.stock_status}</TableCell>
-                  <TableCell>{medicine.delivery_batch}</TableCell>
-                  <TableCell>
-                    {medicine.expiry_date.toLocaleDateString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
           </Table>
+          {isLoading ? (
+            <Loader2 />
+          ) : (
+            <div>
+              {Array.isArray(medicineData) ? (
+                <TableBody>
+                  {medicineData.map((medicine) => (
+                    <TableRow key={medicine.id}>
+                      <TableCell>{medicine.medicine_name}</TableCell>
+                      <TableCell>{medicine.medicine_type}</TableCell>
+                      <TableCell>{medicine.quantity}</TableCell>
+                      <TableCell>{medicine.transaction_status}</TableCell>
+                      <TableCell>{medicine.stock_status}</TableCell>
+                      <TableCell>{medicine.delivery_batch}</TableCell>
+                      <TableCell>
+                        {new Date(medicine.expiry_date).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              ) : (
+                <p>No medicine data available.</p> // Show a message when data is empty
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-

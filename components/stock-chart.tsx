@@ -63,23 +63,27 @@ function FilterBadge({
 }
 
 export function StockChart({ stockLevel }: StockChartProps) {
-  const [selectedLocations, setSelectedLocations] = React.useState<DistributionCenter[]>([]);
-  const [selectedMedicines, setSelectedMedicines] = React.useState<Medicine[]>([]);
+  const [selectedLocations, setSelectedLocations] = React.useState<
+    DistributionCenter[]
+  >([]);
+  const [selectedMedicines, setSelectedMedicines] = React.useState<Medicine[]>(
+    []
+  );
   const [locationSearch, setLocationSearch] = React.useState("");
   const [medicineSearch, setMedicineSearch] = React.useState("");
   const [locationOpen, setLocationOpen] = React.useState(false);
   const [medicineOpen, setMedicineOpen] = React.useState(false);
 
   const locations = React.useMemo(() => {
-    return Array.from(new Set(stockLevel.map(sl => sl.distribution)));
+    return Array.from(new Set(stockLevel.map((sl) => sl.distribution)));
   }, [stockLevel]);
 
   const medicines = React.useMemo(() => {
-    return Array.from(new Set(stockLevel.map(sl => sl.medicines)));
+    return Array.from(new Set(stockLevel.map((sl) => sl.medicines)));
   }, [stockLevel]);
 
   const addLocation = (location: DistributionCenter) => {
-    if (!selectedLocations.some(l => l.id === location.id)) {
+    if (!selectedLocations.some((l) => l.id === location.id)) {
       setSelectedLocations([...selectedLocations, location]);
     }
     setLocationOpen(false);
@@ -91,7 +95,7 @@ export function StockChart({ stockLevel }: StockChartProps) {
   };
 
   const addMedicine = (medicine: Medicine) => {
-    if (!selectedMedicines.some(m => m.id === medicine.id)) {
+    if (!selectedMedicines.some((m) => m.id === medicine.id)) {
       setSelectedMedicines([...selectedMedicines, medicine]);
     }
     setMedicineOpen(false);
@@ -106,14 +110,14 @@ export function StockChart({ stockLevel }: StockChartProps) {
     let filteredStockLevels = stockLevel;
 
     if (selectedLocations.length > 0) {
-      filteredStockLevels = filteredStockLevels.filter(sl =>
-        selectedLocations.some(location => location.id === sl.distribution.id)
+      filteredStockLevels = filteredStockLevels.filter((sl) =>
+        selectedLocations.some((location) => location.id === sl.distribution.id)
       );
     }
 
     if (selectedMedicines.length > 0) {
-      filteredStockLevels = filteredStockLevels.filter(sl =>
-        selectedMedicines.some(medicine => medicine.id === sl.distribution.id)
+      filteredStockLevels = filteredStockLevels.filter((sl) =>
+        selectedMedicines.some((medicine) => medicine.id === sl.distribution.id)
       );
     }
 
@@ -139,11 +143,21 @@ export function StockChart({ stockLevel }: StockChartProps) {
     return selectedMedicines;
   }, [selectedMedicines, medicines]);
 
+  const uniqueMedicines = [
+    ...new Set(
+      filteredData.flatMap((obj) =>
+        Object.keys(obj).filter((key) => key !== "name")
+      )
+    ),
+  ].map((medicine) => ({ medicine_name: medicine }));
+
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>Medicine Stock Levels</CardTitle>
-        <CardDescription>Current stock levels across distribution centers</CardDescription>
+        <CardDescription>
+          Current stock levels across distribution centers
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -155,12 +169,11 @@ export function StockChart({ stockLevel }: StockChartProps) {
                 <Tooltip />
                 <Legend />
                 <CartesianGrid strokeDasharray="3 3" />
-                {medicineList.map((medicine) => (
+
+                {uniqueMedicines.map((medicine) => (
                   <Bar
-                    key={medicine.id}
-                    dataKey={medicine.quantity}
-                    name={medicine.medicine_name}
-                    fill={`hsl(${medicine.id * 100 % 360}, 70%, 50%)`}
+                    key={medicine.medicine_name}
+                    dataKey={medicine.medicine_name}
                   />
                 ))}
               </BarChart>
@@ -208,7 +221,9 @@ export function StockChart({ stockLevel }: StockChartProps) {
                               location.name
                                 .toLowerCase()
                                 .includes(locationSearch.toLowerCase()) &&
-                              !selectedLocations.some(sl => sl.id === location.id)
+                              !selectedLocations.some(
+                                (sl) => sl.id === location.id
+                              )
                           )
                           .map((location) => (
                             <CommandItem
@@ -275,7 +290,9 @@ export function StockChart({ stockLevel }: StockChartProps) {
                               medicine.medicine_name
                                 .toLowerCase()
                                 .includes(medicineSearch.toLowerCase()) &&
-                              !selectedMedicines.some(sm => sm.id === medicine.id)
+                              !selectedMedicines.some(
+                                (sm) => sm.id === medicine.id
+                              )
                           )
                           .map((medicine) => (
                             <CommandItem
