@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { X } from "lucide-react";
+import { X } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import {
   Card,
@@ -23,6 +23,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Bar,
   BarChart,
   ResponsiveContainer,
@@ -33,6 +40,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { DistributionCenter, Medicine, StockLevel } from "@prisma/client";
+import { useEffect, useState } from "react";
 
 interface StockChartProps {
   stockLevel: (StockLevel & {
@@ -63,23 +71,38 @@ function FilterBadge({
 }
 
 export function StockChart({ stockLevel }: StockChartProps) {
-  const [selectedLocations, setSelectedLocations] = React.useState<
-    DistributionCenter[]
-  >([]);
-  const [selectedMedicines, setSelectedMedicines] = React.useState<Medicine[]>(
-    []
-  );
+  const [selectedLocations, setSelectedLocations] = useState<DistributionCenter[]>([]);
+  const [selectedMedicines, setSelectedMedicines] = useState<Medicine[]>([]);
+  const [selectedTransactionStatus, setSelectedTransactionStatus] = useState<string>("Current");
   const [locationSearch, setLocationSearch] = React.useState("");
   const [medicineSearch, setMedicineSearch] = React.useState("");
   const [locationOpen, setLocationOpen] = React.useState(false);
   const [medicineOpen, setMedicineOpen] = React.useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const colors = [
+    "#2E86C1", "#28B463", "#D35400", "#884EA0", "#CB4335", 
+    "#F1C40F", "#17A589", "#839192", "#8E44AD", "#C0392B"
+  ];
 
   const locations = React.useMemo(() => {
-    return Array.from(new Set(stockLevel.map((sl) => sl.distribution)));
+    const uniqueLocations = new Map<number, DistributionCenter>();
+    stockLevel.forEach((sl) => {
+      uniqueLocations.set(sl.distribution.id, sl.distribution);
+    });
+    return Array.from(uniqueLocations.values());
   }, [stockLevel]);
 
   const medicines = React.useMemo(() => {
-    return Array.from(new Set(stockLevel.map((sl) => sl.medicines)));
+    const uniqueMedicines = new Map<string, Medicine>();
+    stockLevel.forEach((sl) => {
+      uniqueMedicines.set(sl.medicines.medicine_name, sl.medicines);
+    });
+    return Array.from(uniqueMedicines.values());
   }, [stockLevel]);
 
   const addLocation = (location: DistributionCenter) => {
@@ -106,24 +129,34 @@ export function StockChart({ stockLevel }: StockChartProps) {
     setSelectedMedicines(selectedMedicines.filter((m) => m.id !== medicine.id));
   };
 
+  const calculateCurrentStock = (medicineData: typeof stockLevel) => {
+    const incomingQuantity = medicineData
+      .filter(sl => sl.medicines.transaction_status === "Incoming")
+      .reduce((sum, sl) => sum + sl.quantity, 0);
+    
+    const outgoingQuantity = medicineData
+      .filter(sl => sl.medicines.transaction_status === "Outgoing")
+      .reduce((sum, sl) => sum + sl.quantity, 0);
+
+    return incomingQuantity - outgoingQuantity;
+  };
+
   const filteredData = React.useMemo(() => {
+    // First filter by selected locations and medicines
     let filteredStockLevels = stockLevel;
 
     if (selectedLocations.length > 0) {
       filteredStockLevels = filteredStockLevels.filter((sl) =>
-        selectedLocations.some((location) => location.id === sl.distribution.id)
+        selectedLocations.some((location) => location.id === sl.distributionCenterId)
       );
     }
 
     if (selectedMedicines.length > 0) {
       filteredStockLevels = filteredStockLevels.filter((sl) =>
-        selectedMedicines.some((medicine) => medicine.id === sl.distribution.id)
+        selectedMedicines.some((medicine) => 
+          medicine.medicine_name === sl.medicines.medicine_name
+        )
       );
-    }
-
-    interface ChartDataPoint {
-      name: string;
-      [key: string]: string | number;
     }
 
     const groupedData = filteredStockLevels.reduce((acc, sl) => {
@@ -131,33 +164,68 @@ export function StockChart({ stockLevel }: StockChartProps) {
       if (!acc[locationName]) {
         acc[locationName] = { name: locationName };
       }
-      acc[locationName][sl.medicines.medicine_name] = sl.quantity;
+
+      const medicineName = sl.medicines.medicine_name;
+      
+      if (selectedTransactionStatus === "Current") {
+        // For Current, calculate net stock (incoming - outgoing)
+        const medicineData = filteredStockLevels.filter(
+          item => item.distribution.name === locationName && 
+          item.medicines.medicine_name === medicineName
+        );
+        acc[locationName][medicineName] = calculateCurrentStock(medicineData);
+      } else {
+        // For Incoming/Outgoing, sum quantities for the selected status
+        if (sl.medicines.transaction_status === selectedTransactionStatus) {
+          acc[locationName][medicineName] = (acc[locationName][medicineName] || 0) + sl.quantity;
+        }
+      }
+      
       return acc;
-    }, {} as Record<string, ChartDataPoint>);
+    }, {} as Record<string, { name: string; [key: string]: string | number }>);
 
     return Object.values(groupedData);
-  }, [stockLevel, selectedLocations, selectedMedicines]);
+  }, [stockLevel, selectedLocations, selectedMedicines, selectedTransactionStatus, isClient]);
 
-  const medicineList = React.useMemo(() => {
-    if (selectedMedicines.length === 0) return medicines;
-    return selectedMedicines;
-  }, [selectedMedicines, medicines]);
+  const uniqueMedicines = React.useMemo(() => {
+    const medicineSet = new Set<string>();
+    filteredData.forEach((dataPoint) => {
+      Object.keys(dataPoint).forEach((key) => {
+        if (key !== "name") {
+          medicineSet.add(key);
+        }
+      });
+    });
+    return Array.from(medicineSet);
+  }, [filteredData, isClient]);
 
-  const uniqueMedicines = [
-    ...new Set(
-      filteredData.flatMap((obj) =>
-        Object.keys(obj).filter((key) => key !== "name")
-      )
-    ),
-  ].map((medicine) => ({ medicine_name: medicine }));
+  if (!isClient) {
+    return null;
+  }
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Medicine Stock Levels</CardTitle>
-        <CardDescription>
-          Current stock levels across distribution centers
-        </CardDescription>
+        <div className="space-y-2">
+          <CardTitle>Medicine Stock Levels</CardTitle>
+          <CardDescription>
+            Current stock levels across distribution centers
+          </CardDescription>
+          <Select
+            value={selectedTransactionStatus}
+            onValueChange={setSelectedTransactionStatus}
+            defaultValue="Current"
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Current">Current</SelectItem>
+              <SelectItem value="Incoming">Incoming</SelectItem>
+              <SelectItem value="Outgoing">Outgoing</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -169,17 +237,19 @@ export function StockChart({ stockLevel }: StockChartProps) {
                 <Tooltip />
                 <Legend />
                 <CartesianGrid strokeDasharray="3 3" />
-
-                {uniqueMedicines.map((medicine) => (
+                {uniqueMedicines.map((medicineName, index) => (
                   <Bar
-                    key={medicine.medicine_name}
-                    dataKey={medicine.medicine_name}
+                    key={medicineName}
+                    dataKey={medicineName}
+                    name={medicineName}
+                    fill={colors[index % colors.length]}
                   />
                 ))}
               </BarChart>
             </ResponsiveContainer>
           </div>
           <div className="space-y-8">
+            {/* Location and Medicine filters remain unchanged */}
             <div className="space-y-4">
               <h2 className="text-base font-medium">Location</h2>
               <Popover open={locationOpen} onOpenChange={setLocationOpen}>

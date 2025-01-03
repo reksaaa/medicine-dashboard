@@ -1,35 +1,23 @@
 "use client";
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "../ui/form";
-import { Input } from "../ui/input";
-import { Button } from "../ui/button";
 import { RegisterSchema } from "@/lib/form_schema";
-import { Loader2 } from "lucide-react";
-import { toast } from "../../hooks/use-toast";
 import { registerUser } from "@/lib/actions/user";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
+import { toast } from "../../hooks/use-toast";
+import { Mail, Lock, User, Loader2 } from 'lucide-react';
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 
 type Inputs = z.infer<typeof RegisterSchema>;
 
 const RegisterForm = () => {
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
   const form = useForm<Inputs>({
@@ -41,12 +29,17 @@ const RegisterForm = () => {
     }
   });
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const processForm: SubmitHandler<Inputs> = async (data) => {
     const validatedData = RegisterSchema.safeParse(data);
     setLoading(true);
 
     if (!validatedData.success) {
       console.log("Something went wrong");
+      setLoading(false);
       return;
     }
 
@@ -59,7 +52,6 @@ const RegisterForm = () => {
     console.log(result);
 
     if (result.error) {
-      // set local error state
       console.log(result.error);
       setLoading(false);
       return;
@@ -73,68 +65,119 @@ const RegisterForm = () => {
       router.push("/login");
     }
   };
+
+  if (!mounted) {
+    return null;
+  }
+
   return (
-    <Card className="w-full max-w-lg">
-      <CardHeader>
-        <CardTitle className="text-2xl">Register</CardTitle>
-        <CardDescription>
-          Register for an account to get started
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(processForm)}
-            className="space-y-5 w-full"
-          >
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem className="w-full">
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input placeholder="example@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="w-full max-w-md space-y-8 rounded-xl bg-white p-10 shadow-2xl">
+        <div className="text-center">
+          <h2 className="mt-6 text-3xl font-bold text-gray-900">Create an account</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Register to get started
+          </p>
+        </div>
+        <form onSubmit={form.handleSubmit(processForm)} className="mt-8 space-y-6">
+          <div className="space-y-4 rounded-md shadow-sm">
+            <div>
+              <Label htmlFor="name" className="sr-only">
+                Name
+              </Label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <User className="h-5 w-5 text-gray-400" />
+                </div>
+                <Input
+                  id="name"
+                  {...form.register("name")}
+                  type="text"
+                  required
+                  className="block w-full rounded-md border-gray-300 pl-10 focus:border-[#00B9AD] focus:ring-[#00B9AD]"
+                  placeholder="Full Name"
+                />
+              </div>
+              {form.formState.errors.name && (
+                <p className="mt-1 text-xs text-red-600">{form.formState.errors.name.message}</p>
               )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem className="w-full">
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Password" type="password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            </div>
+            <div>
+              <Label htmlFor="email" className="sr-only">
+                Email address
+              </Label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Mail className="h-5 w-5 text-gray-400" />
+                </div>
+                <Input
+                  id="email"
+                  {...form.register("email")}
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="block w-full rounded-md border-gray-300 pl-10 focus:border-[#00B9AD] focus:ring-[#00B9AD]"
+                  placeholder="Email address"
+                />
+              </div>
+              {form.formState.errors.email && (
+                <p className="mt-1 text-xs text-red-600">{form.formState.errors.email.message}</p>
               )}
-            />
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem className="w-full">
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            </div>
+            <div>
+              <Label htmlFor="password" className="sr-only">
+                Password
+              </Label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <Input
+                  id="password"
+                  {...form.register("password")}
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  className="block w-full rounded-md border-gray-300 pl-10 focus:border-[#00B9AD] focus:ring-[#00B9AD]"
+                  placeholder="Password"
+                />
+              </div>
+              {form.formState.errors.password && (
+                <p className="mt-1 text-xs text-red-600">{form.formState.errors.password.message}</p>
               )}
-            />
-            <Button type="submit" className="-mt-3 w-full" disabled={loading}>
-              {loading && <Loader2 className="animate-spin" />}
-              {loading ? "Registering..." : "Register"}
+            </div>
+          </div>
+
+          <div>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="group relative flex w-full justify-center rounded-md bg-[#00B9AD] px-4 py-2 text-sm font-medium text-white hover:bg-[#008C82] focus:outline-none focus:ring-2 focus:ring-[#00B9AD] focus:ring-offset-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Registering...
+                </>
+              ) : (
+                "Register"
+              )}
             </Button>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          </div>
+        </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600">
+            Already have an account?{" "}
+            <a href="/login" className="font-medium text-[#00B9AD] hover:text-[#008C82]">
+              Sign in
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 };
 
 export default RegisterForm;
+

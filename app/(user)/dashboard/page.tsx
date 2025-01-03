@@ -1,15 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Boxes, ListTodo, PieChart, ShoppingCart } from "lucide-react";
+import { Boxes, ListTodo, PieChart, ShoppingCart } from 'lucide-react';
 import prisma from "@/lib/prisma";
 import { StockChart } from "@/components/stock-chart";
+import { calculateDashboardMetrics } from "@/lib/utils/calculateMetrics";
 
 export default async function DashboardPage() {
-  const dataDashboard = await prisma.dataDashboard.findUnique({
-    where: {
-      id: 1,
-    },
-  });
-
   const stockLevels = await prisma.stockLevel.findMany({
     include: {
       medicine: true,
@@ -17,16 +12,7 @@ export default async function DashboardPage() {
     },
   });
 
-  // const stockData = distributionCenters.map((center) => {
-  //   const centerData = { location: center.name };
-  //   medicines.forEach((medicine) => {
-  //     const stockLevel = stockLevels.find(
-  //       (sl) => sl.medicineId === medicine.id && sl.distributionCenterId === center.id
-  //     );
-  //     centerData[medicine.id] = stockLevel ? stockLevel.quantity : 0;
-  //   });
-  //   return centerData;
-  // });
+  const metrics = calculateDashboardMetrics(stockLevels);
 
   return (
     <div className="min-h-screen bg-background w-full border">
@@ -49,45 +35,10 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent className="pt-1">
               <div className="text-2xl font-bold">
-                {dataDashboard?.lowest_demand || "N/A"}
+                {metrics.lowestDemand.quantity}
               </div>
               <p className="text-xs text-muted-foreground">
-                Lowest demand medicine
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-              <CardTitle className="text-base font-medium">
-                Slowest Moving
-              </CardTitle>
-              <ShoppingCart
-                className="h-8 w-8 text-teal-500"
-                aria-hidden="true"
-              />
-            </CardHeader>
-            <CardContent className="pt-1">
-              <div className="text-2xl font-bold">
-                {dataDashboard?.slowest_moving || "N/A"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Slowest moving medicine
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-              <CardTitle className="text-base font-medium">
-                Top Distributed
-              </CardTitle>
-              <Boxes className="h-8 w-8 text-teal-500" aria-hidden="true" />
-            </CardHeader>
-            <CardContent className="pt-1">
-              <div className="text-2xl font-bold">
-                {dataDashboard?.top_distributed || "N/A"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Most distributed medicine
+                {metrics.lowestDemand.medicineName}
               </p>
             </CardContent>
           </Card>
@@ -96,14 +47,49 @@ export default async function DashboardPage() {
               <CardTitle className="text-base font-medium">
                 Highest Demand
               </CardTitle>
+              <ShoppingCart
+                className="h-8 w-8 text-teal-500"
+                aria-hidden="true"
+              />
+            </CardHeader>
+            <CardContent className="pt-1">
+              <div className="text-2xl font-bold">
+                {metrics.highestDemand.quantity}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {metrics.highestDemand.medicineName}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+              <CardTitle className="text-base font-medium">
+                Top Distribution Location
+              </CardTitle>
+              <Boxes className="h-8 w-8 text-teal-500" aria-hidden="true" />
+            </CardHeader>
+            <CardContent className="pt-1">
+              <div className="text-2xl font-bold">
+                {metrics.topDistributed.quantity}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {metrics.topDistributed.locationName}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+              <CardTitle className="text-base font-medium">
+                Most Received Item
+              </CardTitle>
               <ListTodo className="h-8 w-8 text-teal-500" aria-hidden="true" />
             </CardHeader>
             <CardContent className="pt-1">
               <div className="text-2xl font-bold">
-                {dataDashboard?.highest_demand || "N/A"}
+                {metrics.mostReceived.quantity}
               </div>
               <p className="text-xs text-muted-foreground">
-                Highest demand medicine
+                {metrics.mostReceived.medicineName}
               </p>
             </CardContent>
           </Card>
@@ -119,3 +105,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+

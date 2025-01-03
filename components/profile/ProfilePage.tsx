@@ -36,6 +36,7 @@ export default function ProfilePage({ user }: ProfilePageProps) {
               defaultValue={user.name}
               placeholder="Your name"
               className="font-inter w-full rounded-xl"
+              disabled
             />
           </div>
 
@@ -51,6 +52,7 @@ export default function ProfilePage({ user }: ProfilePageProps) {
               defaultValue={user.email}
               placeholder="Your email"
               className="font-inter text-xl w-full rounded-xl"
+              disabled
             />
             <Button
               variant="link"

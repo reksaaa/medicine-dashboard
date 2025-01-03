@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L, { LatLngExpression, Icon } from "leaflet";
@@ -21,8 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { findMedicine } from "@/lib/actions/medicine";
-import { Loader2 } from "lucide-react";
-import { Result } from "postcss";
+import { Loader2 } from 'lucide-react';
 
 // Fix Leaflet default icon
 L.Icon.Default.mergeOptions({
@@ -51,7 +50,7 @@ const criticalIcon = new Icon({
   popupAnchor: [0, -45],
 });
 
-// Types from Prisma schema
+// Types
 interface Medicine {
   id: number;
   medicine_name: string;
@@ -69,6 +68,15 @@ interface DistributionCenter {
   name: string;
   latitude: number;
   longitude: number;
+}
+
+interface StockLevel {
+  id: number;
+  medicineId: number;
+  distributionCenterId: number;
+  quantity: number;
+  medicine: Medicine;
+  distributionCenter: DistributionCenter;
 }
 
 interface MapPageProps {
@@ -119,7 +127,7 @@ function CustomMarker({
 export default function MapPage({ distributionCenters }: MapPageProps) {
   const [entries, setEntries] = useState<string>("10");
   const [filterBy, setFilterBy] = useState<string>("");
-  const [medicineData, setMedicineData] = useState<any>();
+  const [medicineData, setMedicineData] = useState<StockLevel[]>([]);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedMarker, setSelectedMarker] = useState<number | null>(null);
@@ -129,14 +137,20 @@ export default function MapPage({ distributionCenters }: MapPageProps) {
 
   const handleMarkerClick = async (index: number) => {
     setIsLoading(true);
+    setSelectedMarker(index);
     try {
-      const result = await findMedicine(1);
-      console.log(result);
-      setMedicineData(result);
-    } catch {
-      setIsLoading(false);
+      const result = await findMedicine(distributionCenters[index].id);
+      if (result.success && result.data) {
+        setMedicineData(result.data);
+      } else {
+        console.error("Failed to fetch medicine data:", result.error);
+        setMedicineData([]);
+      }
+    } catch (error) {
+      console.error("Error fetching medicine data:", error);
+      setMedicineData([]);
     } finally {
-      setIsLoading(false); // Ensure loading indicator is stopped regardless of success or failure
+      setIsLoading(false);
     }
   };
 
@@ -151,32 +165,43 @@ export default function MapPage({ distributionCenters }: MapPageProps) {
     }
   };
 
-  // Filter medicines based on selected filter
-  // const filteredMedicines = useMemo(() => {
-  //   let filtered = [...medicines];
+  // Filter and sort medicineData based on selected filter
+  const filteredMedicineData = useMemo(() => {
+    let filtered = [...medicineData];
 
-  //   switch (filterBy) {
-  //     case "expiry":
-  //       filtered.sort(
-  //         (a, b) => a.expiry_date.getTime() - b.expiry_date.getTime()
-  //       );
-  //       break;
-  //     case "incoming":
-  //       filtered = filtered.filter((m) => m.transaction_status === "Incoming");
-  //       break;
-  //     case "outgoing":
-  //       filtered = filtered.filter((m) => m.transaction_status === "Outgoing");
-  //       break;
-  //     case "quantityLowToHigh":
-  //       filtered.sort((a, b) => a.quantity - b.quantity);
-  //       break;
-  //     case "quantityHighToLow":
-  //       filtered.sort((a, b) => b.quantity - a.quantity);
-  //       break;
-  //   }
+    switch (filterBy) {
+      case "expiry":
+        filtered.sort(
+          (a, b) =>
+            new Date(a.medicine.expiry_date).getTime() -
+            new Date(b.medicine.expiry_date).getTime()
+        );
+        break;
+      case "incoming":
+        filtered = filtered.filter(
+          (m) => m.medicine.transaction_status === "Incoming"
+        );
+        break;
+      case "outgoing":
+        filtered = filtered.filter(
+          (m) => m.medicine.transaction_status === "Outgoing"
+        );
+        break;
+      case "quantityLowToHigh":
+        filtered.sort((a, b) => a.quantity - b.quantity);
+        break;
+      case "quantityHighToLow":
+        filtered.sort((a, b) => b.quantity - a.quantity);
+        break;
+    }
 
-  //   return filtered;
-  // }, [medicines, filterBy]);
+    return filtered;
+  }, [medicineData, filterBy]);
+
+  // Limit the number of entries shown based on the selected value
+  const limitedMedicineData = useMemo(() => {
+    return filteredMedicineData.slice(0, parseInt(entries));
+  }, [filteredMedicineData, entries]);
 
   return (
     <div className="p-8">
@@ -271,32 +296,40 @@ export default function MapPage({ distributionCenters }: MapPageProps) {
                 <TableHead>Expiry Date</TableHead>
               </TableRow>
             </TableHeader>
+            {isLoading ? (
+              <TableBody>
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            ) : limitedMedicineData.length > 0 ? (
+              <TableBody>
+                {limitedMedicineData.map((stockLevel) => (
+                  <TableRow key={stockLevel.id}>
+                    <TableCell>{stockLevel.medicine.medicine_name}</TableCell>
+                    <TableCell>{stockLevel.medicine.medicine_type}</TableCell>
+                    <TableCell>{stockLevel.quantity}</TableCell>
+                    <TableCell>{stockLevel.medicine.transaction_status}</TableCell>
+                    <TableCell>{stockLevel.medicine.stock_status}</TableCell>
+                    <TableCell>{stockLevel.medicine.delivery_batch}</TableCell>
+                    <TableCell>
+                      {new Date(stockLevel.medicine.expiry_date).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            ) : (
+              <TableBody>
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center">
+                    No medicine data available.
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            )}
           </Table>
-          {isLoading ? (
-            <Loader2 />
-          ) : (
-            <div>
-              {Array.isArray(medicineData) ? (
-                <TableBody>
-                  {medicineData.map((medicine) => (
-                    <TableRow key={medicine.id}>
-                      <TableCell>{medicine.medicine_name}</TableCell>
-                      <TableCell>{medicine.medicine_type}</TableCell>
-                      <TableCell>{medicine.quantity}</TableCell>
-                      <TableCell>{medicine.transaction_status}</TableCell>
-                      <TableCell>{medicine.stock_status}</TableCell>
-                      <TableCell>{medicine.delivery_batch}</TableCell>
-                      <TableCell>
-                        {new Date(medicine.expiry_date).toLocaleDateString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              ) : (
-                <p>No medicine data available.</p> // Show a message when data is empty
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>
