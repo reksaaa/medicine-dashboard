@@ -1,93 +1,82 @@
 "use client";
 
-import * as React from "react";
-import {
-  AudioWaveform,
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  GalleryVerticalEnd,
-  Map,
-  PieChart,
-  Settings2,
-  SquareTerminal,
-} from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LayoutGrid, Map, BarChart2, Activity, User, LogOut } from 'lucide-react';
+import { signOut } from "next-auth/react";
 
-import { NavMain } from "@/components/nav-main";
-import { NavProjects } from "@/components/nav-projects";
-import { NavUser } from "@/components/nav-user";
-import { TeamSwitcher } from "@/components/team-switcher";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarRail,
-} from "@/components/ui/sidebar";
+const menuItems = [
+  { name: "Dashboard", icon: LayoutGrid, href: "/dashboard" },
+  { name: "Map", icon: Map, href: "/dashboard/map" },
+  { name: "Stock Forecast", icon: BarChart2, href: "/stock-forecast" },
+  { name: "Disease Trend", icon: Activity, href: "/disease-trend" },
+];
 
-// This is sample data.
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: GalleryVerticalEnd,
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
-    },
-  ],
-  navMain: [
-    {
-      title: "Playground",
-      url: "/playground",
-      icon: SquareTerminal,
-      isActive: true,
-    },
-    {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-    },
-    {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-    },
-  ],
-};
+const settingsItems = [
+  { name: "Profile", icon: User, href: "/dashboard/profile" },
+];
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function Sidebar() {
+  const pathname = usePathname();
+
   return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
-      </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={data.navMain} />
-      </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={data.user} />
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
+    <aside className="sticky top-0 flex min-h-screen w-64 flex-col bg-teal-600 text-white overflow-y-auto">
+      <div className="p-4">
+        <h1 className="text-4xl font-bold">
+          <span className="text-white">Si</span>
+          <span className="text-yellow-300">Modis</span>
+        </h1>
+      </div>
+
+      <nav className="flex-1">
+        <div className="px-4 py-9">
+          <h2 className="mb-4 text-xs font-semibold uppercase">Overview</h2>
+          <ul className="space-y-4">
+            {menuItems.map((item) => (
+              <li key={item.name}>
+                <Link
+                  href={item.href}
+                  className={`flex items-center rounded-lg px-2 py-2 text-base font-semibold hover:bg-teal-700 ${
+                    pathname === item.href ? "bg-teal-700" : ""
+                  }`}
+                >
+                  <item.icon className="mr-3 h-5 w-5" />
+                  {item.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </nav>
+
+      <div className="px-4 py-2">
+        <h2 className="mb-4 text-xs font-semibold uppercase">Settings</h2>
+        <ul className="space-y-4">
+          {settingsItems.map((item) => (
+            <li key={item.name}>
+              <Link
+                href={item.href}
+                className={`flex items-center rounded-lg px-2 py-2 text-base font-semibold hover:bg-teal-700 ${
+                  pathname === item.href ? "bg-teal-700" : ""
+                }`}
+              >
+                <item.icon className="mr-3 h-5 w-5" />
+                {item.name}
+              </Link>
+            </li>
+          ))}
+          <li>
+            <div
+              onClick={() => signOut()}
+              className="flex items-center rounded-lg px-2 py-2 text-base font-semibold hover:bg-teal-700 cursor-pointer"
+            >
+              <LogOut className="mr-3 h-5 w-5" />
+              Logout
+            </div>
+          </li>
+        </ul>
+      </div>
+    </aside>
   );
 }
+
