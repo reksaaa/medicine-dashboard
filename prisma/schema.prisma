@@ -1,52 +1,177 @@
 generator client {
-  provider = "prisma-client-js"
+    provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+    provider  = "postgresql"
+    url       = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
 }
 
-model Medicine {
-    id                 Int          @id @default(autoincrement())
-    medicine_name      String
-    medicine_type      String
-    quantity           Float
-    transaction_status String
-    stock_status       String
-    delivery_batch     String
-    expiry_date        DateTime
-    created_by         String
-    stockLevels        StockLevel[]
+model Kondisi {
+    id                Int                 @id @default(autoincrement()) @map("KondisiId")
+    kondisi           String
+    temp              Boolean             @default(false)
+    rincianPenerimaan RincianPenerimaan[]
+
+    @@map("dbo.Kondisi")
 }
 
-model StockLevel {
-    id                   Int                @id @default(autoincrement())
-    medicine             Medicine           @relation(fields: [medicineId], references: [id])
-    medicineId           Int
-    distributionCenter   DistributionCenter @relation(fields: [distributionCenterId], references: [id])
-    distributionCenterId Int
-    quantity             Float
-    updatedAt            DateTime           @updatedAt
+model Satuan {
+    id         Int          @id @default(autoincrement()) @map("SatuanId")
+    satuan     String
+    temp       Boolean      @default(false)
+    persediaan Persediaan[]
+    stokOpname StokOpname[]
 
-    @@unique([medicineId, distributionCenterId])
+    @@map("dbo.Satuan")
 }
 
-model DataDashboard {
-    id              Int   @id @default(autoincrement())
-    lowest_demand   Float
-    slowest_moving  Float
-    top_distributed Float
-    highest_demand  Float
+model Persediaan {
+    id                 Int                  @id @default(autoincrement()) @map("PersediaanId")
+    namaPersediaan     String
+    kodePersediaan     String
+    levelPersediaan    String
+    satuanMax          Int
+    jumlahMax          Int
+    tipe               String
+    keterangan         String
+    temp               Boolean              @default(false)
+    satuanId           Int
+    satuan             Satuan               @relation(fields: [satuanId], references: [id])
+    rincianPenerimaan  RincianPenerimaan[]
+    rincianPengeluaran RincianPengeluaran[]
+    stokOpname         StokOpname[]
+
+    @@map("dbo.Persediaan")
 }
 
-model DistributionCenter {
-    id          Int          @id @default(autoincrement())
-    name        String
-    latitude    Float
-    longitude   Float
-    stockLevels StockLevel[]
+model Unit {
+    id                Int                 @id @default(autoincrement()) @map("UnitId")
+    namaUnit          String
+    kodeUnit          String
+    akronim           String
+    levelUnit         Int
+    temp              Boolean             @default(false)
+    operator          String
+    longitude         Float
+    latitude          Float
+    alamat            String
+    penerimaan        Penerimaan[]
+    pengeluaran       Pengeluaran[]
+    rincianPenerimaan RincianPenerimaan[]
+    stokOpname        StokOpname[]
+
+    @@map("dbo.Unit")
+}
+
+model Penerimaan {
+    id                Int                 @id @default(autoincrement()) @map("PenerimaanId")
+    nomorPenerimaan   String
+    tanggalPenerimaan DateTime
+    uraian            String
+    tanggalSah        DateTime
+    temp              Boolean             @default(false)
+    accessedBy        String
+    accessedOn        DateTime
+    unitId            Int
+    unit              Unit                @relation(fields: [unitId], references: [id])
+    rincianPenerimaan RincianPenerimaan[]
+
+    @@map("dbo.Penerimaan")
+}
+
+model RincianPenerimaan {
+    id                 Int                  @id @default(autoincrement()) @map("RincianPenerimaanId")
+    banyak             Float
+    jumlah             Float
+    tahun              Int
+    keterangan         String
+    temp               Boolean              @default(false)
+    accessedBy         String
+    accessedOn         DateTime
+    nomorRegister      String
+    tanggalExpired     DateTime
+    merkTipe           String
+    spesifikasi        String
+    penerimaanId       Int
+    persediaanId       Int
+    kondisiId          Int
+    unitId             Int
+    penerimaan         Penerimaan           @relation(fields: [penerimaanId], references: [id])
+    persediaan         Persediaan           @relation(fields: [persediaanId], references: [id])
+    kondisi            Kondisi              @relation(fields: [kondisiId], references: [id])
+    unit               Unit                 @relation(fields: [unitId], references: [id])
+    rincianPengeluaran RincianPengeluaran[]
+
+    @@map("dbo.RincianPenerimaan")
+}
+
+model JenisPengeluaran {
+    id               Int           @id @default(autoincrement()) @map("JenisPengeluaranId")
+    jenisPengeluaran String
+    pengeluaran      Pengeluaran[]
+
+    @@map("dbo.JenisPengeluaran")
+}
+
+model Pengeluaran {
+    id                 Int                  @id @default(autoincrement()) @map("PengeluaranId")
+    nomorPengeluaran   String
+    tanggalSah         DateTime
+    temp               Boolean              @default(false)
+    keterangan         String
+    accessedBy         String
+    accessedOn         DateTime
+    jenisPengeluaranId Int
+    unitId             Int
+    jenisPengeluaran   JenisPengeluaran     @relation(fields: [jenisPengeluaranId], references: [id])
+    unit               Unit                 @relation(fields: [unitId], references: [id])
+    rincianPengeluaran RincianPengeluaran[]
+
+    @@map("dbo.Pengeluaran")
+}
+
+model RincianPengeluaran {
+    id                  Int               @id @default(autoincrement()) @map("RincianPengeluaranId")
+    banyak              Float
+    accessedBy          String
+    accessedOn          DateTime
+    pengeluaranId       Int
+    rincianPenerimaanId Int
+    persediaanId        Int
+    pengeluaran         Pengeluaran       @relation(fields: [pengeluaranId], references: [id])
+    rincianPenerimaan   RincianPenerimaan @relation(fields: [rincianPenerimaanId], references: [id])
+    persediaan          Persediaan        @relation(fields: [persediaanId], references: [id])
+
+    @@map("dbo.RincianPengeluaran")
+}
+
+model StokOpname {
+    id             Int        @id @default(autoincrement()) @map("StokOpnameId")
+    nusp           String
+    saldoAwal      Float
+    penerimaan     Float
+    pengeluaran    Float
+    hilang         Float
+    rusakRingan    Float
+    usang          Float
+    rusakBerat     Float
+    pemusnahan     Float
+    koreksi        Float
+    jumlah         Float
+    tahun          Int
+    tanggalExpired DateTime
+    merkTipe       String
+    spesifikasi    String
+    persediaanId   Int
+    unitId         Int
+    satuanId       Int
+    persediaan     Persediaan @relation(fields: [persediaanId], references: [id])
+    unit           Unit       @relation(fields: [unitId], references: [id])
+    satuan         Satuan     @relation(fields: [satuanId], references: [id])
+
+    @@map("dbo.StokOpname")
 }
 
 model User {

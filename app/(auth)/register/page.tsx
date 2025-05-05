@@ -1,11 +1,14 @@
-import RegisterForm from '@/components/auth/RegisterForm'
-import React from 'react'
+import RegisterForm from "@/components/auth/RegisterForm"
+import { AuthLayout } from "@/components/auth/AuthLayout"
 
-const page = () => {
-  return (<div className='flex min-h-svh w-full items-center justify-center p-6 md:px-[30rem]'>
-    <RegisterForm/>
-    </div>
+export default function Page() {
+  return (
+    <AuthLayout
+      title="Create an account"
+      subtitle="Register to get started"
+    >
+      <RegisterForm />
+    </AuthLayout>
   )
 }
 
-export default page

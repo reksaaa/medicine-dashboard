@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { EmailDialog } from "@/components/email-dialog";
 import { DeleteDialog } from "@/components/delete-dialog";
 import { User } from "@prisma/client";
 
@@ -13,7 +12,6 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ user }: ProfilePageProps) {
-  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   return (
@@ -54,13 +52,6 @@ export default function ProfilePage({ user }: ProfilePageProps) {
               className="font-inter text-xl w-full rounded-xl"
               disabled
             />
-            <Button
-              variant="link"
-              className="font-inter text-blue-500 p-0"
-              onClick={() => setEmailDialogOpen(true)}
-            >
-              Change email
-            </Button>
           </div>
         </div>
 
@@ -75,11 +66,7 @@ export default function ProfilePage({ user }: ProfilePageProps) {
         </div>
       </div>
 
-      <EmailDialog
-        open={emailDialogOpen}
-        onOpenChange={setEmailDialogOpen}
-        currentEmail={user.email}
-      />
+     
 
       <DeleteDialog
         open={deleteDialogOpen}

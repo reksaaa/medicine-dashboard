@@ -25,61 +25,58 @@ interface MetricsResult {
 }
 
 export function calculateDashboardMetrics(stockLevels: ExtendedStockLevel[]): MetricsResult {
-  // Step 1: Create a map to track total demand for each medicine
+  // Step 1: Create maps to track outgoing demand and current stock for each medicine and location
   const medicineDemand = new Map<string, number>();
   const medicineNames = new Map<string, string>();
+  const locationCurrentStock = new Map<string, number>();
+  const locationNames = new Map<string, string>();
+  const receivedTotals = new Map<string, number>();
 
-  // Step 2: Calculate total demand by summing quantities across all locations
+  // Step 2: Calculate outgoing demand, current stock, and received totals
   stockLevels.forEach((stock) => {
     const medicineName = stock.medicine.medicine_name;
-    const currentTotal = medicineDemand.get(medicineName) || 0;
-    medicineDemand.set(medicineName, currentTotal + stock.quantity);
+    const locationName = stock.distributionCenter.name;
+    const quantity = stock.quantity;
+
+    // Update outgoing demand (only for outgoing transactions)
+    if (stock.medicine.transaction_status === "Outgoing") {
+      const currentDemand = medicineDemand.get(medicineName) || 0;
+      medicineDemand.set(medicineName, currentDemand + quantity);
+    }
+
+    // Update current stock (Incoming - Outgoing)
+    const currentStock = locationCurrentStock.get(locationName) || 0;
+    locationCurrentStock.set(locationName, 
+      currentStock + (stock.medicine.transaction_status === "Incoming" ? quantity : -quantity)
+    );
+
+    // Update received totals (only for incoming transactions)
+    if (stock.medicine.transaction_status === "Incoming") {
+      const currentReceived = receivedTotals.get(medicineName) || 0;
+      receivedTotals.set(medicineName, currentReceived + quantity);
+    }
+
     medicineNames.set(medicineName, medicineName);
+    locationNames.set(locationName, locationName);
   });
 
-  // Step 3: Convert demand data to array for comparison
-  const demandEntries = Array.from(medicineDemand.entries()).map(([name, total]) => ({
-    name,
-    total
-  }));
-
-  // Step 4: Find medicines with highest and lowest total demand
+  // Step 3: Find medicines with lowest and highest outgoing demand
+  const demandEntries = Array.from(medicineDemand.entries());
   const lowestDemand = demandEntries.reduce((min, current) => 
-    current.total < min.total ? current : min
-  , { name: '', total: Infinity });
+    current[1] < min[1] ? current : min
+  , ['', Infinity]);
 
   const highestDemand = demandEntries.reduce((max, current) => 
-    current.total > max.total ? current : max
-  , { name: '', total: -Infinity });
+    current[1] > max[1] ? current : max
+  , ['', -Infinity]);
 
-  // Step 5: Calculate distribution center totals
-  const locationTotals = new Map<string, number>();
-  const locationNames = new Map<string, string>();
-
-  stockLevels.forEach((stock) => {
-    const centerName = stock.distributionCenter.name;
-    const currentTotal = locationTotals.get(centerName) || 0;
-    locationTotals.set(centerName, currentTotal + stock.quantity);
-    locationNames.set(centerName, centerName);
-  });
-
-  // Step 6: Find top distribution location
-  const topLocation = Array.from(locationTotals.entries())
-    .reduce(([maxName, maxTotal], [name, total]) => 
-      total > maxTotal ? [name, total] : [maxName, maxTotal]
+  // Step 4: Find top distribution location based on current stock
+  const topLocation = Array.from(locationCurrentStock.entries())
+    .reduce(([maxName, maxStock], [name, stock]) => 
+      stock > maxStock ? [name, stock] : [maxName, maxStock]
     , ['', -Infinity]);
 
-  // Step 7: Calculate most received items (only incoming transactions)
-  const receivedTotals = new Map<string, number>();
-  
-  stockLevels.forEach((stock) => {
-    if (stock.medicine.transaction_status === "Incoming") {
-      const medicineName = stock.medicine.medicine_name;
-      const currentTotal = receivedTotals.get(medicineName) || 0;
-      receivedTotals.set(medicineName, currentTotal + stock.quantity);
-    }
-  });
-
+  // Step 5: Find most received item
   const mostReceived = Array.from(receivedTotals.entries())
     .reduce(([maxName, maxTotal], [name, total]) => 
       total > maxTotal ? [name, total] : [maxName, maxTotal]
@@ -87,12 +84,12 @@ export function calculateDashboardMetrics(stockLevels: ExtendedStockLevel[]): Me
 
   return {
     lowestDemand: {
-      quantity: lowestDemand.total,
-      medicineName: lowestDemand.name
+      quantity: lowestDemand[1],
+      medicineName: lowestDemand[0]
     },
     highestDemand: {
-      quantity: highestDemand.total,
-      medicineName: highestDemand.name
+      quantity: highestDemand[1],
+      medicineName: highestDemand[0]
     },
     topDistributed: {
       quantity: topLocation[1],
@@ -104,3 +101,4 @@ export function calculateDashboardMetrics(stockLevels: ExtendedStockLevel[]): Me
     }
   };
 }
+

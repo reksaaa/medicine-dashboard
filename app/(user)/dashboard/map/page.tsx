@@ -1,22 +1,14 @@
-import MapPage from "@/components/map/MapPage";
-import { Card } from "@/components/ui/card";
-import prisma from "@/lib/prisma";
-import React from "react";
+import MapPage from "@/components/map/MapPage"
+import { getUnitsForMap } from "@/lib/actions/map"
 
 export default async function MapLayout() {
-  // Fetch all medicines
-  const medicines = await prisma.medicine.findMany({
-    orderBy: {
-      medicine_name: "asc",
-    },
-  });
-
-  // Fetch distribution centers
-  const distributionCenters = await prisma.distributionCenter.findMany();
+  // Fetch units with coordinates for the map
+  const unitsResponse = await getUnitsForMap()
+  const units = unitsResponse.success ? unitsResponse.data : []
 
   return (
-    <Card className="m-4 h-full">
-      <MapPage distributionCenters={distributionCenters} />
-    </Card>
-  );
+    <div className="p-4">
+      <MapPage units={units} />
+    </div>
+  )
 }

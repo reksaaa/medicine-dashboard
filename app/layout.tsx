@@ -1,26 +1,23 @@
-import "./globals.css";
-import { Inter } from "next/font/google";
-import { Providers } from "./providers";
-import { Toaster } from "@/components/ui/toaster";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-});
+const inter = Inter({ subsets: ['latin'] })
+
+export const metadata: Metadata = {
+  title: 'SiModis - Smart Medical Inventory Management System',
+  description: 'Smart inventory management system for monitoring medicines and medical supplies in health warehouses and puskesmas across Indonesia.',
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.className}>
-      <body>
-        <Providers>
-          <main className="flex-1 overflow-auto">{children}</main>
-        </Providers>
-        <Toaster />
-      </body>
+    <html lang="en" className="scroll-smooth">
+      <body className={`${inter.className} antialiased`}>{children}</body>
     </html>
-  );
+  )
 }
+

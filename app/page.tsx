@@ -1,7 +1,16 @@
-import { redirect } from "next/navigation";
+import Hero from '@/components/landing/Hero'
+import About from '@/components/landing//About'
+import Features from '@/components/landing/Features'
+import CTA from '@/components/landing/CTA'
 
-const page = () => {
-  redirect("/login");
-};
+export default function Home() {
+  return (
+    <main className="min-h-screen bg-white">
+      <Hero />
+      <About />
+      <Features />
+      <CTA />
+    </main>
+  )
+}
 
-export default page;

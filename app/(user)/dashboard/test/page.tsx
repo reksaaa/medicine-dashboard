@@ -1,12 +1,6 @@
-import Test from "@/components/test";
-import React from "react";
-import prisma from "@/lib/prisma";
+import { OverviewPage } from "@/components/dashboard/overview-page"
 
-const Page = async () => {
-  const stock = await prisma.stockLevel.findMany({
-    include: { medicine: true, distributionCenter: true },
-  });
-  return <Test stock={stock} />;
-};
-
-export default Page;
+// This comment forces a refresh - you can change it to test hot reloading
+export default function TestPage() {
+  return <OverviewPage />
+}
