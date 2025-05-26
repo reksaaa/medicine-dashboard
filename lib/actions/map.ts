@@ -27,13 +27,135 @@ export async function getUnitsForMap() {
   }
 }
 
+
 // Get stock opname data for a specific unit
-export async function getUnitStockOpname(unitId: number) {
+export async function getUnitStockOpname(unitId: number, page: number = 1, pageSize: number = 10, search?: string, filter?: string) {
   try {
-    const stockData = await prisma.stokOpname.findMany({
-      where: {
-        unitId: unitId,
+    // Check if we should fetch all items (special case for alerts tab)
+    const fetchAll = pageSize === -1;
+    
+    // Build the where clause
+    let whereClause: any = {
+      unitId: unitId,
+    };
+    
+    // Add search filter if provided
+    if (search && search.trim() !== '') {
+      whereClause = {
+        ...whereClause,
+        OR: [
+          {
+            persediaan: {
+              namaPersediaan: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          },
+          {
+            nusp: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+          {
+            persediaan: {
+              tipe: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        ],
+      };
+    }
+    
+    // Add specific filters if provided
+    if (filter && filter !== 'all') {
+      const currentDate = new Date();
+      const oneYearFromNow = new Date();
+      oneYearFromNow.setFullYear(currentDate.getFullYear() + 1);
+      
+      switch (filter) {
+        case 'expired':
+          whereClause = {
+            ...whereClause,
+            tanggalExpired: {
+              lte: currentDate,
+            },
+          };
+          break;
+        case 'nearExpiry':
+          whereClause = {
+            ...whereClause,
+            tanggalExpired: {
+              gt: currentDate,
+              lte: oneYearFromNow,
+            },
+          };
+          break;
+        case 'damaged':
+          whereClause = {
+            ...whereClause,
+            OR: [
+              { rusakRingan: { gt: 0 } },
+              { rusakBerat: { gt: 0 } },
+              { usang: { gt: 0 } },
+              { hilang: { gt: 0 } },
+            ],
+          };
+          break;
+        case 'low':
+          whereClause = {
+            ...whereClause,
+            jumlah: {
+              lt: 100, // Low stock threshold
+            },
+          };
+          break;
+      }
+    }
+
+    // Determine the order by clause based on filter
+    let orderBy: any = {
+      persediaan: {
+        namaPersediaan: 'asc',
       },
+    };
+    
+    if (filter) {
+      switch (filter) {
+        case 'expiryAsc':
+          orderBy = {
+            tanggalExpired: 'asc',
+          };
+          break;
+        case 'expiryDesc':
+          orderBy = {
+            tanggalExpired: 'desc',
+          };
+          break;
+        case 'quantityAsc':
+          orderBy = {
+            jumlah: 'asc',
+          };
+          break;
+        case 'quantityDesc':
+          orderBy = {
+            jumlah: 'desc',
+          };
+          break;
+      }
+    }
+
+    // Get total count for pagination info
+    const totalCount = await prisma.stokOpname.count({
+      where: whereClause,
+    });
+
+    // Get paginated data or all data
+    const stockData = await prisma.stokOpname.findMany({
+      where: whereClause,
       include: {
         persediaan: {
           select: {
@@ -48,25 +170,33 @@ export async function getUnitStockOpname(unitId: number) {
           },
         },
       },
-      orderBy: {
-        persediaan: {
-          namaPersediaan: "asc",
-        },
-      },
-    })
+      orderBy: orderBy,
+      // Skip pagination when fetchAll is true
+      skip: fetchAll ? 0 : (page - 1) * pageSize,
+      // Don't limit results when fetchAll is true
+      take: fetchAll ? undefined : pageSize,
+    });
 
     return {
       success: true,
       data: stockData,
-    }
+      pagination: {
+        totalItems: totalCount,
+        totalPages: fetchAll ? 1 : Math.ceil(totalCount / pageSize),
+        currentPage: page,
+        pageSize: pageSize
+      }
+    };
   } catch (error) {
-    console.error("Error fetching unit stock opname:", error)
+    console.error("Error fetching unit stock opname:", error);
     return {
       success: false,
       error: `Failed to fetch stock data: ${error instanceof Error ? error.message : "Unknown error"}`,
-    }
+    };
   }
 }
+
+
 
 // Get units with critical inventory status
 export async function getUnitsWithCriticalInventory() {

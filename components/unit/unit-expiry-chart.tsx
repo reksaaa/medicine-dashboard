@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { getMedicinesApproachingExpiry } from "@/lib/actions/unit-stock-history"
+import { Button } from "@/components/ui/button"
+import { ChevronDown, ChevronUp, List, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 
 interface UnitExpiryChartProps {
   unitId: number
@@ -11,13 +13,15 @@ interface UnitExpiryChartProps {
 }
 
 interface ExpiryData {
-  id: number
+  id: number              // This is persediaanId
+  stokOpnameId: number    // Add this field
   name: string
   code: string
   quantity: number
   unit: string
   daysRemaining: number
   expiryDate: Date
+  nusp: string  
 }
 
 export function UnitExpiryChart({ unitId, selectedMedicines }: UnitExpiryChartProps) {
@@ -25,6 +29,14 @@ export function UnitExpiryChart({ unitId, selectedMedicines }: UnitExpiryChartPr
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
+
+  // State variables for enhanced functionality
+  const [displayCount, setDisplayCount] = useState(5)
+  const [expandedView, setExpandedView] = useState(false)
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Fix hydration issues by only rendering after component is mounted
   useEffect(() => {
@@ -57,31 +69,63 @@ export function UnitExpiryChart({ unitId, selectedMedicines }: UnitExpiryChartPr
     fetchData()
   }, [unitId, selectedMedicines, mounted])
 
-  // Format data for the chart - limit to top 5 medicines with earliest expiry
-  const chartData = expiryData
-    .sort((a, b) => a.daysRemaining - b.daysRemaining) // Sort by days remaining (ascending)
-    .slice(0, 5) // Take top 5
-    .map((item) => {
-      // Truncate and format medicine name for better readability
-      let formattedName = item.name
+  // Reset pagination when data changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [expiryData])
 
-      // If name is too long, truncate it and add the code in a new line
-      if (formattedName.length > 20) {
-        formattedName = `${formattedName.substring(0, 20)}...`
-      }
+  // Don't render anything on the server, only on the client
+  if (!mounted) {
+    return (
+      <div className="h-[400px] flex items-center justify-center">
+        <p className="text-muted-foreground">Loading chart...</p>
+      </div>
+    )
+  }
 
-      // Add code in brackets for identification
-      formattedName = `${formattedName} [${item.code}]`
+  // Sort data by days remaining
+  const sortedData = [...expiryData].sort((a, b) => a.daysRemaining - b.daysRemaining)
+  
+  // Calculate pagination or use expanded view
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage)
+  const indexOfLastItem = expandedView ? sortedData.length : currentPage * itemsPerPage
+  const indexOfFirstItem = expandedView ? 0 : indexOfLastItem - itemsPerPage
+  const currentItems = sortedData.slice(indexOfFirstItem, indexOfLastItem)
 
-      return {
-        name: formattedName,
-        fullName: item.name, // Keep full name for tooltip
-        code: item.code,
-        quantity: item.quantity,
-        daysRemaining: item.daysRemaining,
-        unit: item.unit,
-      }
-    })
+  // Format data for the chart
+  const chartData = currentItems.map((item) => {
+    // Truncate and format medicine name for better readability
+    let formattedName = item.name
+
+    // If name is too long, truncate it and add the code in a new line
+    if (formattedName.length > 20) {
+      formattedName = `${formattedName.substring(0, 20)}...`
+    }
+
+    // Add code in brackets for identification
+    formattedName = `${formattedName} [${item.code}]`
+
+    return {
+      key: item.stokOpnameId,
+      name: formattedName,
+      fullName: item.name,
+      code: item.code,
+      quantity: item.quantity,
+      daysRemaining: item.daysRemaining,
+      unit: item.unit,
+      nusp: item.nusp,
+    }
+  })
+
+  // Pagination functions
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  const goToFirstPage = () => goToPage(1)
+  const goToLastPage = () => goToPage(totalPages)
+  const goToPreviousPage = () => goToPage(currentPage - 1)
+  const goToNextPage = () => goToPage(currentPage + 1)
 
   // Find the maximum quantity to set appropriate scale for X-axis
   const maxQuantity = chartData.length > 0 ? Math.max(...chartData.map((item) => item.quantity)) : 100
@@ -103,7 +147,7 @@ export function UnitExpiryChart({ unitId, selectedMedicines }: UnitExpiryChartPr
       return (
         <div className="bg-background p-2 border rounded-md shadow-sm">
           <p className="font-medium">{item.fullName}</p>
-          <p className="text-sm">{`Code: ${item.code}`}</p>
+          <p className="text-sm">{`Code: ${item.nusp}`}</p>
           <p className="text-sm">{`Quantity: ${payload[0].value} ${item.unit}`}</p>
           <p className="text-sm">{`Days Remaining: ${payload[1].value}`}</p>
         </div>
@@ -112,16 +156,38 @@ export function UnitExpiryChart({ unitId, selectedMedicines }: UnitExpiryChartPr
     return null
   }
 
-  // Don't render anything on the server, only on the client
-  if (!mounted) {
-    return null
+  // Calculate chart height based on number of items
+  const getChartHeight = () => {
+    const itemCount = chartData.length
+    if (expandedView) {
+      // For expanded view, allocate at least 50px per item, with a minimum of 300px
+      return Math.max(300, itemCount * 50)
+    }
+    // For paginated view, 50px per item with min 300px
+    return Math.max(300, itemCount * 50)
   }
 
   return (
     <Card className="h-full unit-expiry-chart">
-      <CardHeader>
-        <CardTitle>Medicines Approaching Expiry</CardTitle>
-        <CardDescription>Medicines that will expire within the next 30 days</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div>
+          <CardTitle>Medicines Approaching Expiry</CardTitle>
+          <CardDescription>Medicines that will expire within 1 year</CardDescription>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setExpandedView(!expandedView)
+              // Reset to page 1 when toggling view
+              setCurrentPage(1)
+            }}
+          >
+            <List className="h-4 w-4 mr-1" />
+            {expandedView ? "Paginated View" : "View All"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -132,42 +198,95 @@ export function UnitExpiryChart({ unitId, selectedMedicines }: UnitExpiryChartPr
           <div className="flex items-center justify-center h-[300px] text-red-500">
             <p>{error}</p>
           </div>
-        ) : chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={chartData}
-              layout="vertical"
-              margin={{
-                top: 5,
-                right: 30,
-                left: 5, // Reduced left margin to move Y-axis closer to container edge
-                bottom: 5,
-              }}
+        ) : expiryData.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <div className="text-sm text-muted-foreground">
+              {expandedView 
+                ? `Showing all ${sortedData.length} medicines` 
+                : `Showing ${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, sortedData.length)} of ${sortedData.length} medicines`}
+            </div>
+            <div
+              className={expandedView && chartData.length > 10 ? "overflow-y-auto pr-2" : ""}
+              style={{ maxHeight: expandedView ? "600px" : "auto" }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                type="number"
-                domain={[0, xAxisMaximum]} // Set the domain based on data
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={140}
-                tick={{ fontSize: 12 }}
-                tickFormatter={(value) => {
-                  // Format the tick labels to fit better
-                  return value.length > 18 ? `${value.substring(0, 15)}...` : value
-                }}
-                // Move Y-axis to the right side of the chart
-                orientation="right"
-                yAxisId={0}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-              <Bar dataKey="quantity" fill="#60a5fa" name="Quantity" />
-              <Bar dataKey="daysRemaining" fill="#fbbf24" name="Days Remaining" />
-            </BarChart>
-          </ResponsiveContainer>
+              <ResponsiveContainer width="100%" height={getChartHeight()}>
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{
+                    top: 5,
+                    right: 30,
+                    left: 5,
+                    bottom: 5,
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    type="number"
+                    domain={[0, xAxisMaximum]}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={140}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => {
+                      return value.length > 18 ? `${value.substring(0, 15)}...` : value
+                    }}
+                    orientation="right"
+                    yAxisId={0}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar dataKey="quantity" fill="#60a5fa" name="Quantity" />
+                  <Bar dataKey="daysRemaining" fill="#fbbf24" name="Days Remaining" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Pagination controls */}
+            {!expandedView && totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center space-x-2">
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={goToFirstPage} 
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={goToPreviousPage} 
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm">
+                    Page {currentPage} of {totalPages || 1}
+                  </span>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={goToNextPage} 
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={goToLastPage} 
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="flex items-center justify-center h-[300px]">
             <p className="text-muted-foreground">No medicines approaching expiry</p>

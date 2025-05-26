@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowUp, ArrowDown, Minus } from "lucide-react"
 import { Package, PackageCheck, BarChart3, TrendingUp } from "lucide-react"
 
 interface DashboardMetrics {
@@ -16,7 +16,7 @@ interface DashboardMetrics {
   }
   availableStock: {
     value: number
-    change: number
+    change: number | null
   }
   stockToConsumptionRatio: {
     value: number
@@ -82,10 +82,15 @@ export function OverviewCards({ metrics, isLoading }: OverviewCardsProps) {
                   <ArrowUp className="mr-1 h-4 w-4 text-green-500" />
                   <span className="text-green-500">+{metrics.totalReceipts.change.toFixed(1)}%</span>
                 </>
-              ) : (
+              ) : metrics && metrics.totalReceipts.change < 0 ? (
                 <>
                   <ArrowDown className="mr-1 h-4 w-4 text-red-500" />
-                  <span className="text-red-500">{metrics ? metrics.totalReceipts.change.toFixed(1) : 0}%</span>
+                  <span className="text-red-500">{metrics.totalReceipts.change.toFixed(1)}%</span>
+                </>
+              ) : (
+                <>
+                  <Minus className="mr-1 h-4 w-4 text-gray-500" />
+                  <span className="text-gray-500">0.0%</span>
                 </>
               )}
               <span className="ml-1 text-muted-foreground">from last month</span>
@@ -109,10 +114,15 @@ export function OverviewCards({ metrics, isLoading }: OverviewCardsProps) {
                   <ArrowUp className="mr-1 h-4 w-4 text-green-500" />
                   <span className="text-green-500">+{metrics.totalDispensed.change.toFixed(1)}%</span>
                 </>
-              ) : (
+              ) : metrics && metrics.totalDispensed.change < 0 ? (
                 <>
                   <ArrowDown className="mr-1 h-4 w-4 text-red-500" />
-                  <span className="text-red-500">{metrics ? metrics.totalDispensed.change.toFixed(1) : 0}%</span>
+                  <span className="text-red-500">{metrics.totalDispensed.change.toFixed(1)}%</span>
+                </>
+              ) : (
+                <>
+                  <Minus className="mr-1 h-4 w-4 text-gray-500" />
+                  <span className="text-gray-500">0.0%</span>
                 </>
               )}
               <span className="ml-1 text-muted-foreground">from last month</span>
@@ -130,20 +140,8 @@ export function OverviewCards({ metrics, isLoading }: OverviewCardsProps) {
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="text-2xl font-bold">{metrics ? formatNumber(metrics.availableStock.value) : 0}</div>
-            <div className="flex items-center text-sm">
-              {metrics && metrics.availableStock.change > 0 ? (
-                <>
-                  <ArrowUp className="mr-1 h-4 w-4 text-green-500" />
-                  <span className="text-green-500">+{metrics.availableStock.change.toFixed(1)}%</span>
-                </>
-              ) : (
-                <>
-                  <ArrowDown className="mr-1 h-4 w-4 text-red-500" />
-                  <span className="text-red-500">{metrics ? metrics.availableStock.change.toFixed(1) : 0}%</span>
-                </>
-              )}
-              <span className="ml-1 text-muted-foreground">from last month</span>
-            </div>
+            {/* Removed percentage comparison for Available Stock as requested */}
+            <div className="text-sm text-muted-foreground">Current inventory</div>
           </div>
         </CardContent>
       </Card>
@@ -156,19 +154,22 @@ export function OverviewCards({ metrics, isLoading }: OverviewCardsProps) {
               <span className="text-sm font-medium text-muted-foreground">Stock-to-Consumption</span>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </div>
-            <div className="text-2xl font-bold">{metrics ? metrics.stockToConsumptionRatio.value : 0}×</div>
+            <div className="text-2xl font-bold">{metrics ? metrics.stockToConsumptionRatio.value.toFixed(1) : 0}×</div>
             <div className="flex items-center text-sm">
               {metrics && metrics.stockToConsumptionRatio.change > 0 ? (
                 <>
                   <ArrowUp className="mr-1 h-4 w-4 text-green-500" />
                   <span className="text-green-500">+{metrics.stockToConsumptionRatio.change.toFixed(1)}%</span>
                 </>
-              ) : (
+              ) : metrics && metrics.stockToConsumptionRatio.change < 0 ? (
                 <>
                   <ArrowDown className="mr-1 h-4 w-4 text-red-500" />
-                  <span className="text-red-500">
-                    {metrics ? metrics.stockToConsumptionRatio.change.toFixed(1) : 0}%
-                  </span>
+                  <span className="text-red-500">{metrics.stockToConsumptionRatio.change.toFixed(1)}%</span>
+                </>
+              ) : (
+                <>
+                  <Minus className="mr-1 h-4 w-4 text-gray-500" />
+                  <span className="text-gray-500">0.0%</span>
                 </>
               )}
               <span className="ml-1 text-muted-foreground">from last month</span>

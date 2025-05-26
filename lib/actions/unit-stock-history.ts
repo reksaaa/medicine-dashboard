@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma"
 
+// Update the getUnitStockHistory function to ensure months are properly ordered with current month at the end
 export async function getUnitStockHistory(unitId: number) {
   try {
     // Get current date
@@ -11,10 +12,59 @@ export async function getUnitStockHistory(unitId: number) {
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(currentDate.getMonth() - 6)
 
-    // We'll need to simulate historical data since we don't have actual historical records
-    // In a real application, you would query a history or audit table that tracks inventory changes
+    // We'll fetch the total dispensed items for this unit for the past 6 months
+    // First, get all pengeluaran (dispensing) records for this unit in the past 6 months
+    const dispensingRecords = await prisma.pengeluaran.findMany({
+      where: {
+        unitId: unitId,
+        tanggalSah: {
+          gte: sixMonthsAgo,
+          lte: currentDate,
+        },
+      },
+      include: {
+        rincianPengeluaran: {
+          include: {
+            persediaan: true,
+          },
+        },
+      },
+    })
 
-    // First, get the current stock level for this unit
+    // Create an array of the last 7 months (current month + 6 previous months)
+    const months = []
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date()
+      date.setMonth(currentDate.getMonth() - i)
+      months.push({
+        date: new Date(date.getFullYear(), date.getMonth(), 1), // First day of month
+        name: date.toLocaleString("default", { month: "short" }),
+        totalDispensed: 0,
+      })
+    }
+
+    // Calculate total dispensed items per month
+    dispensingRecords.forEach((record) => {
+      const recordMonth = new Date(record.tanggalSah).getMonth()
+      const recordYear = new Date(record.tanggalSah).getFullYear()
+
+      // Find the matching month in our array
+      const monthIndex = months.findIndex(
+        (m) => m.date.getMonth() === recordMonth && m.date.getFullYear() === recordYear,
+      )
+
+      if (monthIndex !== -1) {
+        // Sum up the quantities from all rincianPengeluaran for this record
+        const totalDispensed = record.rincianPengeluaran.reduce((sum, detail) => {
+          return sum + detail.banyak
+        }, 0)
+
+        // Add to the monthly total
+        months[monthIndex].totalDispensed += totalDispensed
+      }
+    })
+
+    // Get the current total stock for this unit
     const currentStock = await prisma.stokOpname.aggregate({
       _sum: {
         jumlah: true,
@@ -26,27 +76,24 @@ export async function getUnitStockHistory(unitId: number) {
 
     const currentStockValue = currentStock._sum.jumlah || 0
 
-    // Generate simulated historical data based on the current stock
-    // We'll create slight variations to make the chart interesting
-    const months = []
+    // Calculate the stock level by starting with the current stock
+    // and adding back the dispensed items as we go back in time
+    let runningStock = currentStockValue
     const stockData = []
 
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date()
-      date.setMonth(currentDate.getMonth() - i)
+    // Process months in reverse order (from current month back to 6 months ago)
+    // This ensures we're calculating historical stock levels correctly
+    for (let i = months.length - 1; i >= 0; i--) {
+      const month = months[i]
 
-      // Format month name
-      const monthName = date.toLocaleString("default", { month: "short" })
-      months.push(monthName)
+      // For past months, add back the dispensed items to get the previous stock level
+      if (i < months.length - 1) {
+        runningStock += month.totalDispensed
+      }
 
-      // Generate a stock value with some random variation
-      // Base it on current stock with some fluctuation
-      const variationPercent = Math.random() * 0.1 - 0.05 // -5% to +5%
-      const stockValue = Math.round(currentStockValue * (1 + variationPercent))
-
-      stockData.push({
-        month: monthName,
-        value: stockValue,
+      stockData.unshift({
+        month: month.name,
+        value: Math.round(runningStock),
       })
     }
 
@@ -111,7 +158,7 @@ export async function getMedicinesApproachingExpiry(unitId: number, selectedMedi
     })
 
     // Format the data for the chart
-    const result = expiringMedicines.map((medicine) => {
+    const result = expiringMedicines.map((medicine, id) => {
       // Calculate days remaining until expiry
       const expiryDate = medicine.tanggalExpired
       const daysRemaining = expiryDate
@@ -119,13 +166,15 @@ export async function getMedicinesApproachingExpiry(unitId: number, selectedMedi
         : 0
 
       return {
-        id: medicine.persediaanId,
+        id,
+        stokOpnameId: medicine.id,
         name: medicine.persediaan.namaPersediaan,
         code: medicine.persediaan.kodePersediaan,
         quantity: medicine.jumlah || 0,
         unit: medicine.satuan?.satuan || "Unit",
         daysRemaining: daysRemaining,
         expiryDate: medicine.tanggalExpired,
+        nusp: medicine.nusp, // Include the NUSP value from StokOpname table
       }
     })
 
@@ -156,20 +205,22 @@ export async function getMedicinesApproachingExpiry(unitId: number, selectedMedi
       // Create simulated expiry data
       return {
         success: true,
-        data: unitMedicines.map((medicine, index) => {
+        data: unitMedicines.map((medicine, id) => {
           // Generate random days remaining (1-365)
           const daysRemaining = Math.floor(Math.random() * 365) + 1
           const expiryDate = new Date()
           expiryDate.setDate(currentDate.getDate() + daysRemaining)
 
           return {
-            id: medicine.persediaanId,
+            id,
+            stokOpnameId: medicine.id,
             name: medicine.persediaan.namaPersediaan,
             code: medicine.persediaan.kodePersediaan,
             quantity: medicine.jumlah || 0,
             unit: medicine.satuan?.satuan || "Unit",
             daysRemaining: daysRemaining,
             expiryDate: expiryDate,
+            nusp: medicine.nusp, // Include NUSP in sample data too
           }
         }),
       }
@@ -225,11 +276,11 @@ export async function getTopMedicinesInUnit(unitId: number, selectedMedicines?: 
     })
 
     // Format the data for the table
-    const result = topMedicines.map((medicine) => {
+    const result = topMedicines.map((medicine, id) => {
       return {
-        id: medicine.persediaanId,
+        id,
         name: medicine.persediaan.namaPersediaan,
-        code: medicine.persediaan.kodePersediaan,
+        code: medicine.nusp || "N/A",
         stock: medicine.jumlah || 0,
         unit: medicine.satuan?.satuan || "Unit",
         status: medicine.jumlah > 0 ? "Available" : "Out of Stock",
@@ -281,31 +332,40 @@ export async function getLowStockWarnings(unitId: number, selectedMedicines?: nu
       },
     })
 
-    // In a real application, you would have a table with minimum threshold values
-    // Since we don't have that, we'll simulate it based on the current stock
+    // Get current date
+    const currentDate = new Date()
 
-    // Filter to only include medicines with low stock
+    // Calculate date 1 year from now
+    const oneYearFromNow = new Date()
+    oneYearFromNow.setFullYear(currentDate.getFullYear() + 1)
+
+    // Filter to only include medicines with low stock (under 100)
     const lowStockMedicines = medicines.filter((medicine) => {
-      // Calculate a simulated minimum threshold (20% of average stock or 10, whichever is higher)
-      const minimumThreshold = Math.max(10, Math.round((medicine.jumlah || 0) * 0.2))
-
-      // Consider it low stock if current quantity is less than the minimum threshold
-      return (medicine.jumlah || 0) < minimumThreshold
+      // Simplified threshold - always 100 units regardless of type
+      return (medicine.jumlah || 0) < 100
     })
 
     // Format the data for the table
-    const result = lowStockMedicines.map((medicine) => {
-      // Calculate a simulated minimum threshold (20% of average stock or 10, whichever is higher)
-      const minimumThreshold = Math.max(10, Math.round((medicine.jumlah || 0) * 1.2))
+    const result = lowStockMedicines.map((medicine, id) => {
+      // Check if medicine is also expiring soon
+      const isExpiringSoon =
+        medicine.tanggalExpired && medicine.tanggalExpired > currentDate && medicine.tanggalExpired <= oneYearFromNow
+
+      // Calculate days remaining until expiry
+      const daysRemaining = medicine.tanggalExpired
+        ? Math.max(0, Math.ceil((medicine.tanggalExpired.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)))
+        : null
 
       return {
-        id: medicine.persediaanId,
+        id,
         name: medicine.persediaan.namaPersediaan,
-        code: medicine.persediaan.kodePersediaan,
+        code: medicine.nusp || "N/A",
         currentStock: medicine.jumlah || 0,
         unit: medicine.satuan?.satuan || "Unit",
-        minimumThreshold: minimumThreshold,
-        status: "Low Stock",
+        minimumThreshold: 100, // Fixed threshold
+        expiryDate: medicine.tanggalExpired,
+        daysRemaining: daysRemaining,
+        status: isExpiringSoon ? "Low Stock & Expiring Soon" : "Low Stock",
       }
     })
 

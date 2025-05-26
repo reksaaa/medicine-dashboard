@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma"
 
+
 // Add this new function to get medicines for a specific unit
 export async function getUnitMedicines(unitId: number) {
   try {
@@ -246,66 +247,169 @@ export async function getUnits() {
 
 export async function getDashboardMetrics() {
   try {
-    // 1. Total Receipts (from RincianPenerimaan - sum of banyak)
-    const totalReceipts = await prisma.rincianPenerimaan.aggregate({
+    // Get current date and calculate first day of current and previous month
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+
+    // First day of current month in UTC
+    const firstDayCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1))
+    
+    // First day of next month in UTC (used to get the end of current month)
+    const firstDayNextMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1))
+    
+    // First day of previous month in UTC
+    const firstDayPreviousMonth = new Date(Date.UTC(currentYear, currentMonth - 1, 1))
+    
+    // Debug date ranges
+    console.log({
+      firstDayCurrentMonth: firstDayCurrentMonth.toISOString(),
+      firstDayNextMonth: firstDayNextMonth.toISOString(),
+      firstDayPreviousMonth: firstDayPreviousMonth.toISOString(),
+    })
+
+    // Get receipts for current month
+    const currentMonthReceipts = await prisma.penerimaan.findMany({
       where: {
-        temp: false,
+        tanggalPenerimaan: {
+          gte: firstDayCurrentMonth,
+          lt: firstDayNextMonth,
+        },
       },
-      _sum: {
-        banyak: true,
+      include: {
+        rincianPenerimaan: {
+          select: {
+            jumlah: true, // Changed from banyak to jumlah
+          },
+        },
       },
     })
 
-    // 2. Total Dispensed (from RincianPengeluaran - sum of banyak)
-    const totalDispensed = await prisma.rincianPengeluaran.aggregate({
-      _sum: {
-        banyak: true,
+    // Get receipts for previous month
+    const previousMonthReceipts = await prisma.penerimaan.findMany({
+      where: {
+        tanggalPenerimaan: {
+          gte: firstDayPreviousMonth,
+          lt: firstDayCurrentMonth,
+        },
+      },
+      include: {
+        rincianPenerimaan: {
+          select: {
+            jumlah: true, // Changed from banyak to jumlah
+          },
+        },
       },
     })
 
-    // 3. Available Stock (from StokOpname)
-    const availableStock = await prisma.stokOpname.aggregate({
+    // Get dispensed items for current month
+    const currentMonthDispensed = await prisma.pengeluaran.findMany({
+      where: {
+        tanggalSah: {
+          gte: firstDayCurrentMonth,
+          lt: firstDayNextMonth,
+        },
+      },
+      include: {
+        rincianPengeluaran: {
+          select: {
+            banyak: true,
+          },
+        },
+      },
+    })
+
+    // Get dispensed items for previous month
+    const previousMonthDispensed = await prisma.pengeluaran.findMany({
+      where: {
+        tanggalSah: {
+          gte: firstDayPreviousMonth,
+          lt: firstDayCurrentMonth,
+        },
+      },
+      include: {
+        rincianPengeluaran: {
+          select: {
+            banyak: true,
+          },
+        },
+      },
+    })
+
+    // Calculate total receipts for current month
+    const receiptsCurrentMonth = currentMonthReceipts.reduce((total, receipt) => {
+      return total + receipt.rincianPenerimaan.reduce((sum, item) => sum + (item.jumlah || 0), 0)
+    }, 0)
+
+    // Calculate total receipts for previous month
+    const receiptsPreviousMonth = previousMonthReceipts.reduce((total, receipt) => {
+      return total + receipt.rincianPenerimaan.reduce((sum, item) => sum + (item.jumlah || 0), 0)
+    }, 0)
+
+    // Calculate total dispensed for current month
+    const dispensedCurrentMonth = currentMonthDispensed.reduce((total, dispensed) => {
+      return total + dispensed.rincianPengeluaran.reduce((sum, item) => sum + (item.banyak || 0), 0)
+    }, 0)
+
+    // Calculate total dispensed for previous month
+    const dispensedPreviousMonth = previousMonthDispensed.reduce((total, dispensed) => {
+      return total + dispensed.rincianPengeluaran.reduce((sum, item) => sum + (item.banyak || 0), 0)
+    }, 0)
+
+    // Get current stock from stokOpname
+    const currentStock = await prisma.stokOpname.aggregate({
       _sum: {
         jumlah: true,
       },
     })
 
-    // Get the actual values
-    const receiptsValue = totalReceipts._sum.banyak || 0
-    const dispensedValue = totalDispensed._sum.banyak || 0
-    const stockValue = availableStock._sum.jumlah || 0
+    // Calculate percentage changes
+    const receiptChange =
+      receiptsPreviousMonth > 0 ? ((receiptsCurrentMonth - receiptsPreviousMonth) / receiptsPreviousMonth) * 100 : 0
 
-    // Calculate stock-to-consumption ratio
-    const monthlyConsumption = dispensedValue || 1 // Avoid division by zero
-    const stockToConsumptionRatio = stockValue / monthlyConsumption
+    const dispensedChange =
+      dispensedPreviousMonth > 0
+        ? ((dispensedCurrentMonth - dispensedPreviousMonth) / dispensedPreviousMonth) * 100
+        : 0
 
-    // Calculate percentage changes based on some logic
-    // For now, we'll use a simple calculation based on the current values
-    // In a real app, you'd compare with historical data
-    const receiptChange = receiptsValue > 0 ? ((receiptsValue * 0.1) / receiptsValue) * 100 : 0
-    const dispensedChange = dispensedValue > 0 ? ((dispensedValue * 0.08) / dispensedValue) * 100 : 0
-    const stockChange = stockValue > 0 ? ((stockValue * 0.03) / stockValue) * 100 : 0
-    const ratioChange =
-      stockToConsumptionRatio > 0 ? ((stockToConsumptionRatio * 0.02) / stockToConsumptionRatio) * 100 : 0
+    // Calculate stock-to-consumption ratio (current stock / monthly consumption)
+    const stockToConsumptionRatio =
+      dispensedCurrentMonth > 0 ? (currentStock._sum.jumlah || 0) / dispensedCurrentMonth : 0
 
+    // Calculate previous month's stock-to-consumption ratio for comparison
+    const previousMonthStockOpname = await prisma.stokOpname.aggregate({
+      _sum: {
+        jumlah: true,
+      },
+    })
+
+    const previousStockToConsumptionRatio =
+      dispensedPreviousMonth > 0 ? (previousMonthStockOpname._sum.jumlah || 0) / dispensedPreviousMonth : 0
+
+    const stockToConsumptionChange =
+      previousStockToConsumptionRatio > 0
+        ? ((stockToConsumptionRatio - previousStockToConsumptionRatio) / previousStockToConsumptionRatio) * 100
+        : 0
+
+    // Return formatted metrics
     return {
       success: true,
       data: {
         totalReceipts: {
-          value: Math.round(receiptsValue),
+          value: receiptsCurrentMonth,
           change: receiptChange,
         },
         totalDispensed: {
-          value: Math.round(dispensedValue),
+          value: dispensedCurrentMonth,
           change: dispensedChange,
         },
         availableStock: {
-          value: Math.round(stockValue),
-          change: stockChange,
+          value: currentStock._sum.jumlah || 0,
+          change: null,
         },
         stockToConsumptionRatio: {
-          value: Number.parseFloat(stockToConsumptionRatio.toFixed(1)),
-          change: ratioChange,
+          value: stockToConsumptionRatio,
+          change: stockToConsumptionChange,
         },
       },
     }
@@ -320,9 +424,26 @@ export async function getDashboardMetrics() {
 
 export async function getTopReceivedItems(selectedMedicines?: number[]) {
   try {
-    // Create the base query
+    // Get current date and calculate first day of current and next month
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+    
+    // First day of current month in UTC
+    const firstDayCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1))
+    
+    // First day of next month in UTC (used to get the end of current month)
+    const firstDayNextMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1))
+
+    // Create the base query with date filter
     const whereClause: any = {
       temp: false,
+      penerimaan: {
+        tanggalPenerimaan: {
+          gte: firstDayCurrentMonth,
+          lt: firstDayNextMonth,
+        }
+      }
     }
 
     // If selectedMedicines is provided, filter by those IDs
@@ -332,16 +453,16 @@ export async function getTopReceivedItems(selectedMedicines?: number[]) {
       }
     }
 
-    // Query to get top received items
+    // Query to get top received items, using jumlah column instead of banyak
     const topItems = await prisma.rincianPenerimaan.groupBy({
       by: ["persediaanId"],
       where: whereClause,
       _sum: {
-        banyak: true,
+        jumlah: true, // Using jumlah instead of banyak
       },
       orderBy: {
         _sum: {
-          banyak: "desc",
+          jumlah: "desc", // Using jumlah instead of banyak
         },
       },
       take: 10,
@@ -364,7 +485,7 @@ export async function getTopReceivedItems(selectedMedicines?: number[]) {
         return {
           id: item.persediaanId,
           name: persediaan ? `${persediaan.namaPersediaan}` : `Item #${item.persediaanId}`,
-          value: item._sum.banyak || 0,
+          value: item._sum.jumlah || 0, // Using jumlah instead of banyak
         }
       }),
     )
@@ -384,8 +505,28 @@ export async function getTopReceivedItems(selectedMedicines?: number[]) {
 
 export async function getTopDispensedItems(selectedMedicines?: number[]) {
   try {
-    // Create the base query
-    const whereClause: any = {}
+    // Get current date and calculate first day of current and next month
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+    
+    // First day of current month in UTC
+    const firstDayCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1))
+    
+    // First day of next month in UTC (used to get the end of current month)
+    const firstDayNextMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1))
+
+    // Create the base query with date filter
+    const whereClause: any = {
+   
+      pengeluaran: {
+        tanggalSah: {
+          gte: firstDayCurrentMonth,
+          lt: firstDayNextMonth,
+        },
+        temp: false
+      }
+    }
 
     // If selectedMedicines is provided, filter by those IDs
     if (selectedMedicines && selectedMedicines.length > 0) {

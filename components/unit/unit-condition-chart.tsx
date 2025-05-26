@@ -100,7 +100,10 @@ export function UnitConditionChart({ unitId, selectedMedicines }: UnitConditionC
                 dataKey="value"
               >
                 {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[entry.name as keyof typeof COLORS] || "#9ca3af"} />
+                  <Cell 
+                    key={`condition-${entry.name}-${index}`} 
+                    fill={COLORS[entry.name as keyof typeof COLORS]} 
+                  />
                 ))}
               </Pie>
               <Tooltip content={<CustomTooltip />} />

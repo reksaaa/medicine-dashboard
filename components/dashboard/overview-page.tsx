@@ -9,6 +9,7 @@ import { TablesSection } from "@/components/dashboard/tables-section"
 import { NotificationBell } from "@/components/notification/notification-bell"
 import { getUnits, getDashboardMetrics } from "@/lib/actions/medicine"
 import { ExportReport } from "@/components/dashboard/export-report"
+import { AIInsightsPanel } from "@/components/dashboard/ai-insights-panel"
 
 // Types based on your Prisma schema
 interface Unit {
@@ -140,6 +141,13 @@ export function OverviewPage() {
         <ItemsSection selectedMedicines={selectedMedicines} />
 
         <TablesSection selectedMedicines={selectedMedicines} />
+        
+        {/* Add AI Insights Panel at the bottom */}
+        <AIInsightsPanel
+          metrics={metrics}
+          selectedMedicines={selectedMedicines}
+          isLoading={isLoading || isPending}
+        />
       </div>
     </div>
   )

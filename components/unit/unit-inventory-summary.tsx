@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { getUnitInventorySummary } from "@/lib/actions/unit"
+import { getUnitInventorySummary } from "@/lib/actions/unit-metrics"
+import { Package, CheckCircle, AlertTriangle } from "lucide-react"
 
 interface UnitInventorySummaryProps {
   unitId: number
 }
 
 interface InventorySummary {
-  totalInventory: number
+  uniqueMedicines: number
   available: number
   damagedOrExpired: number
 }
@@ -62,7 +63,7 @@ export function UnitInventorySummary({ unitId }: UnitInventorySummaryProps) {
           {isLoading ? (
             <>
               <div className="flex flex-col items-center">
-                <div className="text-sm text-muted-foreground">Total Inventory</div>
+                <div className="text-sm text-muted-foreground">Unique Medicines</div>
                 <div className="h-8 w-16 animate-pulse bg-muted rounded mt-2"></div>
               </div>
               <div className="flex flex-col items-center">
@@ -79,15 +80,24 @@ export function UnitInventorySummary({ unitId }: UnitInventorySummaryProps) {
           ) : inventorySummary ? (
             <>
               <div className="flex flex-col items-center">
-                <div className="text-sm text-muted-foreground">Total Inventory</div>
-                <div className="text-4xl font-bold mt-2">{inventorySummary.totalInventory}</div>
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Package className="h-4 w-4 mr-1" />
+                  Unique Medicines
+                </div>
+                <div className="text-4xl font-bold mt-2">{inventorySummary.uniqueMedicines}</div>
               </div>
               <div className="flex flex-col items-center">
-                <div className="text-sm text-muted-foreground">Available</div>
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Available
+                </div>
                 <div className="text-4xl font-bold mt-2 text-green-600">{inventorySummary.available}</div>
               </div>
               <div className="flex flex-col items-center">
-                <div className="text-sm text-muted-foreground">Damaged/Expired</div>
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4 mr-1" />
+                  Damaged/Expired
+                </div>
                 <div className="text-4xl font-bold mt-2 text-red-500">{inventorySummary.damagedOrExpired}</div>
               </div>
             </>

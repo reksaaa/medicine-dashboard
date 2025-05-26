@@ -7,13 +7,18 @@ import L, { type LatLngExpression, Icon } from "leaflet"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Search, Download, Map, Layers, AlertTriangle, Clock } from "lucide-react"
+import { 
+  Loader2, Search, Download, Map, Layers, AlertTriangle, Clock, 
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+} from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getUnitStockOpname } from "@/lib/actions/map"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+
 
 // Fix Leaflet default icon issue
 const DefaultIcon = L.icon({
@@ -76,6 +81,7 @@ interface StockOpnameItem {
   usang: number
   hilang: number
   tanggalExpired?: Date
+  nusp: string
   persediaan: {
     namaPersediaan: string
     kodePersediaan: string
@@ -84,6 +90,20 @@ interface StockOpnameItem {
   satuan: {
     satuan: string
   }
+}
+
+interface PaginationInfo {
+  totalItems: number
+  totalPages: number
+  currentPage: number
+  pageSize: number
+}
+
+interface StockOpnameResponse {
+  success: boolean
+  data?: StockOpnameItem[]
+  error?: string
+  pagination?: PaginationInfo
 }
 
 // Custom marker component
@@ -146,18 +166,49 @@ interface MapPageProps {
 export default function MapPage({ units }: MapPageProps) {
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null)
   const [stockData, setStockData] = useState<StockOpnameItem[]>([])
+  const [alertsData, setAlertsData] = useState<StockOpnameItem[]>([])
+  const [allAlertsData, setAllAlertsData] = useState<StockOpnameItem[]>([]) // Store all alerts for pagination
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [isLoadingAlerts, setIsLoadingAlerts] = useState<boolean>(false)
   const [filterBy, setFilterBy] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [entries, setEntries] = useState<string>("10")
   const [activeTab, setActiveTab] = useState<string>("inventory")
   const [mounted, setMounted] = useState(false)
   const [unitStatusesState, setUnitStatuses] = useState<Record<number, "normal" | "lowStock" | "critical">>({})
+  const [filterOpen, setFilterOpen] = useState(false)
+  
+  // NEW: Added states for alerts tab
+  const [alertsFilterBy, setAlertsFilterBy] = useState<string>("all")
+  const [alertsFilterOpen, setAlertsFilterOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  
+  // Pagination state for inventory
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [totalPages, setTotalPages] = useState<number>(1)
+  const [totalItems, setTotalItems] = useState<number>(0)
+  const [pageSize, setPageSize] = useState<number>(10)
+  
+  // NEW: Pagination state for alerts
+  const [alertsCurrentPage, setAlertsCurrentPage] = useState<number>(1)
+  const [alertsPageSize, setAlertsPageSize] = useState<number>(10)
 
   // Fix hydration issues
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Calculate paginated alerts data
+  const paginatedAlertsData = useMemo(() => {
+    const startIndex = (alertsCurrentPage - 1) * alertsPageSize;
+    const endIndex = startIndex + alertsPageSize;
+    return allAlertsData.slice(startIndex, endIndex);
+  }, [allAlertsData, alertsCurrentPage, alertsPageSize]);
+
+  // Calculate total pages for alerts
+  const alertsTotalPages = useMemo(() => {
+    return Math.ceil(allAlertsData.length / alertsPageSize);
+  }, [allAlertsData, alertsPageSize]);
 
   // Determine unit status based on stock data
   const unitStatuses = useMemo(() => {
@@ -199,20 +250,20 @@ export default function MapPage({ units }: MapPageProps) {
             if (response.success && response.data) {
               const stockData = response.data
 
-              // Count critical items (expired, near expiry, or very low stock)
+              // Count critical items (expired or very low stock)
               const criticalItems = stockData.filter(
                 (item) =>
                   (item.tanggalExpired && new Date(item.tanggalExpired) <= new Date()) || // Expired
-                  item.jumlah < 3, // Very low stock
+                  item.jumlah < 50, // Very low stock (half of the low stock threshold)
               ).length
 
               // Count low stock items
               const lowStockItems = stockData.filter(
                 (item) =>
-                  (item.jumlah >= 3 && item.jumlah < 10) || // Low but not critical
+                  (item.jumlah >= 50 && item.jumlah < 100) || // Low but not critical
                   (item.tanggalExpired &&
                     new Date(item.tanggalExpired) > new Date() &&
-                    new Date(item.tanggalExpired) <= new Date(new Date().setDate(new Date().getDate() + 30))), // Near expiry
+                    new Date(item.tanggalExpired) <= new Date(new Date().setFullYear(new Date().getFullYear() + 1))), // Expiring within 1 year
               ).length
 
               // Determine status based on counts
@@ -242,18 +293,67 @@ export default function MapPage({ units }: MapPageProps) {
     fetchUnitStatuses()
   }, [units, mounted, unitStatuses])
 
-  // Handle marker click
+  // Handle marker click - now fetches both paginated inventory data and all alerts data
   const handleMarkerClick = async (unit: Unit) => {
     setIsLoading(true)
+    setIsLoadingAlerts(true)
     setSelectedUnit(unit)
+    setCurrentPage(1)
+    setAlertsCurrentPage(1) // Reset alerts pagination too
 
     try {
-      const response = await getUnitStockOpname(unit.id)
+      // Fetch paginated data for inventory tab
+      const response = await getUnitStockOpname(unit.id, 1, Number.parseInt(entries))
       if (response.success && response.data) {
         setStockData(response.data)
+        if (response.pagination) {
+          setTotalPages(response.pagination.totalPages)
+          setTotalItems(response.pagination.totalItems)
+          setPageSize(response.pagination.pageSize)
+        }
       } else {
         console.error("Failed to fetch stock data:", response.error)
         setStockData([])
+      }
+      
+      // Fetch all data for alerts tab
+      try {
+        const alertsResponse = await getUnitStockOpname(unit.id, 1, -1)
+        if (alertsResponse.success && alertsResponse.data) {
+          // Filter items with alerts directly here
+          const filteredAlerts = alertsResponse.data.filter((item) => {
+            const currentDate = new Date()
+            const oneYearFromNow = new Date()
+            oneYearFromNow.setFullYear(currentDate.getFullYear() + 1)
+            
+            const isExpired = item.tanggalExpired && new Date(item.tanggalExpired) <= currentDate
+            const isExpiringSoon =
+              item.tanggalExpired &&
+              new Date(item.tanggalExpired) > currentDate &&
+              new Date(item.tanggalExpired) <= oneYearFromNow
+            const isLowStock = item.jumlah < 100
+            
+            return (
+              isExpired ||
+              isExpiringSoon ||
+              isLowStock ||
+              item.rusakRingan > 0 ||
+              item.rusakBerat > 0 ||
+              item.usang > 0 ||
+              item.hilang > 0
+            )
+          })
+          
+          setAllAlertsData(filteredAlerts) // Store all alerts for pagination
+        } else {
+          console.error("Failed to fetch alerts data:", alertsResponse.error)
+          setAllAlertsData([])
+        }
+      } catch (alertError) {
+        console.error("Error fetching alerts data:", alertError)
+        setAllAlertsData([])
+      } finally {
+        setIsLoadingAlerts(false)
       }
     } catch (error) {
       console.error("Error fetching stock data:", error)
@@ -263,83 +363,195 @@ export default function MapPage({ units }: MapPageProps) {
     }
   }
 
-  // Filter and sort stock data based on selected filter
-  const filteredStockData = useMemo(() => {
-    if (!stockData.length) return []
-
-    let filtered = [...stockData]
-
-    // Apply search filter
-    if (searchQuery.trim() !== "") {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(
-        (item) =>
-          item.persediaan.namaPersediaan.toLowerCase().includes(query) ||
-          item.persediaan.kodePersediaan.toLowerCase().includes(query) ||
-          item.persediaan.tipe.toLowerCase().includes(query),
-      )
+  // Handle page changes for inventory
+  const handlePageChange = async (page: number) => {
+    if (!selectedUnit) return
+    
+    setIsLoading(true)
+    try {
+      const response = await getUnitStockOpname(selectedUnit.id, page, Number.parseInt(entries))
+      if (response.success && response.data) {
+        setStockData(response.data)
+        setCurrentPage(page)
+        if (response.pagination) {
+          setTotalPages(response.pagination.totalPages)
+          setTotalItems(response.pagination.totalItems)
+        }
+      } else {
+        console.error("Failed to fetch stock data:", response.error)
+      }
+    } catch (error) {
+      console.error("Error fetching page data:", error)
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    // Apply dropdown filter
-    switch (filterBy) {
-      case "expiryAsc":
-        filtered = filtered
-          .filter((item) => item.tanggalExpired)
-          .sort((a, b) => new Date(a.tanggalExpired!).getTime() - new Date(b.tanggalExpired!).getTime())
-        break
-      case "expiryDesc":
-        filtered = filtered
-          .filter((item) => item.tanggalExpired)
-          .sort((a, b) => new Date(b.tanggalExpired!).getTime() - new Date(a.tanggalExpired!).getTime())
-        break
-      case "quantityAsc":
-        filtered.sort((a, b) => a.jumlah - b.jumlah)
-        break
-      case "quantityDesc":
-        filtered.sort((a, b) => b.jumlah - a.jumlah)
-        break
-      case "damaged":
-        filtered = filtered.filter(
-          (item) => item.rusakRingan > 0 || item.rusakBerat > 0 || item.usang > 0 || item.hilang > 0,
-        )
-        break
-      case "expired":
-        filtered = filtered.filter((item) => item.tanggalExpired && new Date(item.tanggalExpired) <= new Date())
-        break
-      case "nearExpiry":
-        const thirtyDaysFromNow = new Date()
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
+  // NEW: Handle alerts page change (client-side pagination)
+  const handleAlertsPageChange = (page: number) => {
+    setAlertsCurrentPage(page);
+  }
 
-        filtered = filtered.filter(
-          (item) =>
+  // Handle entries change for inventory
+  const handleEntriesChange = async (value: string) => {
+    setEntries(value)
+    if (!selectedUnit) return
+    
+    setIsLoading(true)
+    try {
+      const response = await getUnitStockOpname(selectedUnit.id, 1, Number.parseInt(value))
+      if (response.success && response.data) {
+        setStockData(response.data)
+        setCurrentPage(1)
+        if (response.pagination) {
+          setTotalPages(response.pagination.totalPages)
+          setTotalItems(response.pagination.totalItems)
+          setPageSize(response.pagination.pageSize)
+        }
+      } else {
+        console.error("Failed to fetch stock data:", response.error)
+      }
+    } catch (error) {
+      console.error("Error fetching page data:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // NEW: Handle alerts entries change
+  const handleAlertsEntriesChange = (value: string) => {
+    setAlertsPageSize(Number.parseInt(value));
+    setAlertsCurrentPage(1); // Reset to first page when changing entries
+  }
+
+  // Apply search filter for inventory
+  const handleSearch = async (value: string) => {
+    setSearchQuery(value)
+    if (!selectedUnit) return
+
+    // Debounce the search requests
+    const timeoutId = setTimeout(async () => {
+      setIsLoading(true)
+      try {
+        const response = await getUnitStockOpname(selectedUnit.id, 1, Number.parseInt(entries), value, filterBy)
+        if (response.success && response.data) {
+          setStockData(response.data)
+          setCurrentPage(1)
+          if (response.pagination) {
+            setTotalPages(response.pagination.totalPages)
+            setTotalItems(response.pagination.totalItems)
+          }
+        } else {
+          console.error("Failed to fetch search data:", response.error)
+        }
+      } catch (error) {
+        console.error("Error fetching search data:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }
+
+  // Handle filter change for inventory
+  const handleFilterChange = async (value: string) => {
+    setFilterBy(value)
+    setFilterOpen(false)
+    if (!selectedUnit) return
+
+    setIsLoading(true)
+    try {
+      const response = await getUnitStockOpname(selectedUnit.id, 1, Number.parseInt(entries), searchQuery, value)
+      if (response.success && response.data) {
+        setStockData(response.data)
+        setCurrentPage(1)
+        if (response.pagination) {
+          setTotalPages(response.pagination.totalPages)
+          setTotalItems(response.pagination.totalItems)
+        }
+      } else {
+        console.error("Failed to fetch filtered data:", response.error)
+      }
+    } catch (error) {
+      console.error("Error fetching filtered data:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // NEW: Handle alerts filter change
+  const handleAlertsFilterChange = async (value: string) => {
+    setAlertsFilterBy(value)
+    setAlertsFilterOpen(false)
+    if (!selectedUnit) return
+
+    setIsLoadingAlerts(true)
+    try {
+      // Fetch all data first
+      const alertsResponse = await getUnitStockOpname(selectedUnit.id, 1, -1, "", value)
+      if (alertsResponse.success && alertsResponse.data) {
+        // Filter items with alerts
+        const filteredAlerts = alertsResponse.data.filter((item) => {
+          const currentDate = new Date()
+          const oneYearFromNow = new Date()
+          oneYearFromNow.setFullYear(currentDate.getFullYear() + 1)
+          
+          const isExpired = item.tanggalExpired && new Date(item.tanggalExpired) <= currentDate
+          const isExpiringSoon =
             item.tanggalExpired &&
-            new Date(item.tanggalExpired) > new Date() &&
-            new Date(item.tanggalExpired) <= thirtyDaysFromNow,
-        )
-        break
+            new Date(item.tanggalExpired) > currentDate &&
+            new Date(item.tanggalExpired) <= oneYearFromNow
+          const isLowStock = item.jumlah < 100
+          
+          return (
+            isExpired ||
+            isExpiringSoon ||
+            isLowStock ||
+            item.rusakRingan > 0 ||
+            item.rusakBerat > 0 ||
+            item.usang > 0 ||
+            item.hilang > 0
+          )
+        })
+        
+        setAllAlertsData(filteredAlerts)
+        setAlertsCurrentPage(1) // Reset to first page when filtering
+      } else {
+        console.error("Failed to fetch alerts data:", alertsResponse.error)
+        setAllAlertsData([])
+      }
+    } catch (alertError) {
+      console.error("Error fetching alerts data:", alertError)
+      setAllAlertsData([])
+    } finally {
+      setIsLoadingAlerts(false)
     }
-
-    return filtered
-  }, [stockData, filterBy, searchQuery])
-
-  // Limit the number of entries shown
-  const limitedStockData = useMemo(() => {
-    return filteredStockData.slice(0, Number.parseInt(entries))
-  }, [filteredStockData, entries])
+  }
 
   // Get stock status badge
   const getStockStatusBadge = (item: StockOpnameItem) => {
-    if (item.tanggalExpired && new Date(item.tanggalExpired) <= new Date()) {
+    const currentDate = new Date()
+    const oneYearFromNow = new Date()
+    oneYearFromNow.setFullYear(currentDate.getFullYear() + 1)
+
+    const isExpired = item.tanggalExpired && new Date(item.tanggalExpired) <= currentDate
+    const isExpiringSoon =
+      item.tanggalExpired &&
+      new Date(item.tanggalExpired) > currentDate &&
+      new Date(item.tanggalExpired) <= oneYearFromNow
+    const isLowStock = item.jumlah < 100
+
+    if (isExpired) {
       return <Badge className="bg-red-500 hover:bg-red-600">Expired</Badge>
     }
 
-    if (item.tanggalExpired) {
-      const thirtyDaysFromNow = new Date()
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
+    if (isLowStock && isExpiringSoon) {
+      return <Badge className="bg-red-500 hover:bg-red-600">Low Stock & Expiring Soon</Badge>
+    }
 
-      if (new Date(item.tanggalExpired) <= thirtyDaysFromNow) {
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Near Expiry</Badge>
-      }
+    if (isExpiringSoon) {
+      return <Badge className="bg-blue-500 hover:bg-blue-600">Expiring Soon</Badge>
     }
 
     if (item.rusakBerat > 0) {
@@ -358,8 +570,8 @@ export default function MapPage({ units }: MapPageProps) {
       return <Badge className="bg-gray-500 hover:bg-gray-600">Lost</Badge>
     }
 
-    if (item.jumlah < 10) {
-      return <Badge className="bg-yellow-500 hover:bg-yellow-600">Low Stock</Badge>
+    if (isLowStock) {
+      return <Badge className="bg-amber-500 hover:bg-amber-600">Low Stock</Badge>
     }
 
     return <Badge className="bg-green-500 hover:bg-green-600">Good</Badge>
@@ -371,53 +583,114 @@ export default function MapPage({ units }: MapPageProps) {
     return new Date(date).toLocaleDateString()
   }
 
-  // Export to CSV
-  const exportToCSV = () => {
-    if (!stockData.length) return
+  // MODIFIED: Export to CSV - now handles both inventory and alerts data
+  const exportToCSV = async (dataType: 'inventory' | 'alerts' = 'inventory') => {
+    if (!selectedUnit) return
 
-    const headers = ["Medicine Name", "Code", "Type", "Quantity", "Damaged", "Expiry Date", "Status"]
+    setIsExporting(true)
 
-    const csvData = stockData.map((item) => {
-      const status =
-        item.tanggalExpired && new Date(item.tanggalExpired) <= new Date()
-          ? "Expired"
-          : item.tanggalExpired &&
-              new Date(item.tanggalExpired) <= new Date(new Date().setDate(new Date().getDate() + 30))
-            ? "Near Expiry"
-            : item.rusakBerat > 0
-              ? "Major Damage"
-              : item.rusakRingan > 0
-                ? "Minor Damage"
-                : item.usang > 0
-                  ? "Obsolete"
-                  : item.hilang > 0
-                    ? "Lost"
-                    : item.jumlah < 10
-                      ? "Low Stock"
-                      : "Good"
+    try {
+      // Fetch all data for export (not paginated)
+      const response = await getUnitStockOpname(
+        selectedUnit.id, 
+        1, 
+        -1, 
+        "", 
+        dataType === 'inventory' ? filterBy : alertsFilterBy
+      )
+      
+      if (!response.success || !response.data || !response.data.length) {
+        console.error("No data to export")
+        return
+      }
+      
+      // Use the appropriate data based on which tab is being exported
+      const dataToExport = dataType === 'alerts' 
+        ? response.data.filter(item => {
+            const currentDate = new Date()
+            const oneYearFromNow = new Date()
+            oneYearFromNow.setFullYear(currentDate.getFullYear() + 1)
+            
+            const isExpired = item.tanggalExpired && new Date(item.tanggalExpired) <= currentDate
+            const isExpiringSoon =
+              item.tanggalExpired &&
+              new Date(item.tanggalExpired) > currentDate &&
+              new Date(item.tanggalExpired) <= oneYearFromNow
+            const isLowStock = item.jumlah < 100
+            
+            return (
+              isExpired ||
+              isExpiringSoon ||
+              isLowStock ||
+              item.rusakRingan > 0 ||
+              item.rusakBerat > 0 ||
+              item.usang > 0 ||
+              item.hilang > 0
+            )
+          })
+        : response.data
 
-      return [
-        item.persediaan.namaPersediaan,
-        item.persediaan.kodePersediaan,
-        item.persediaan.tipe,
-        `${item.jumlah} ${item.satuan.satuan}`,
-        (item.rusakRingan + item.rusakBerat + item.usang + item.hilang).toString(),
-        item.tanggalExpired ? formatDate(item.tanggalExpired) : "N/A",
-        status,
-      ]
-    })
+      const headers = ["Medicine Name", "Code", "Type", "Quantity", "Damaged", "Expiry Date", "Status"]
 
-    const csvContent = [headers.join(","), ...csvData.map((row) => row.map((cell) => `"${cell}"`).join(","))].join("\n")
+      const csvData = dataToExport.map((item) => {
+        const currentDate = new Date()
+        const oneYearFromNow = new Date()
+        oneYearFromNow.setFullYear(currentDate.getFullYear() + 1)
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", `${selectedUnit?.namaUnit}_inventory.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+        const isExpired = item.tanggalExpired && new Date(item.tanggalExpired) <= currentDate
+        const isExpiringSoon =
+          item.tanggalExpired &&
+          new Date(item.tanggalExpired) > currentDate &&
+          new Date(item.tanggalExpired) <= oneYearFromNow
+        const isLowStock = item.jumlah < 100
+
+        let status = "Good"
+
+        if (isExpired) {
+          status = "Expired"
+        } else if (isLowStock && isExpiringSoon) {
+          status = "Low Stock & Expiring Soon"
+        } else if (isExpiringSoon) {
+          status = "Expiring Soon"
+        } else if (item.rusakBerat > 0) {
+          status = "Major Damage"
+        } else if (item.rusakRingan > 0) {
+          status = "Minor Damage"
+        } else if (item.usang > 0) {
+          status = "Obsolete"
+        } else if (item.hilang > 0) {
+          status = "Lost"
+        } else if (isLowStock) {
+          status = "Low Stock"
+        }
+
+        return [
+          item.persediaan.namaPersediaan,
+          item.nusp,
+          item.persediaan.tipe,
+          `${item.jumlah} ${item.satuan.satuan}`,
+          (item.rusakRingan + item.rusakBerat + item.usang + item.hilang).toString(),
+          item.tanggalExpired ? formatDate(item.tanggalExpired) : "N/A",
+          status,
+        ]
+      })
+
+      const csvContent = [headers.join(","), ...csvData.map((row) => row.map((cell) => `"${cell}"`).join(","))].join("\n")
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.setAttribute("href", url)
+      link.setAttribute("download", `${selectedUnit?.namaUnit}_${dataType}.csv`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      console.error("Error exporting data:", error)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   if (!mounted) {
@@ -529,21 +802,52 @@ export default function MapPage({ units }: MapPageProps) {
 
       {/* Stock Data Section */}
       <Card className="border-0 shadow-lg">
+        {/* MODIFIED: Updated header with export options dropdown */}
         <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b">
           <div className="flex justify-between items-center">
             <CardTitle className="text-xl font-bold">
               {selectedUnit ? `Inventory for ${selectedUnit.namaUnit}` : "Select a unit to view inventory"}
             </CardTitle>
             {selectedUnit && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-1 border-teal-600 text-teal-600 hover:bg-teal-50"
-                onClick={exportToCSV}
-              >
-                <Download className="h-4 w-4" />
-                Export
-              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-1 border-teal-600 text-teal-600 hover:bg-teal-50"
+                    disabled={isExporting}
+                  >
+                    {isExporting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-1" />
+                    )}
+                    Export
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="bottom" align="end" className="w-[200px] p-0">
+                  <div className="flex flex-col">
+                    <Button
+                      variant="ghost"
+                      className="justify-start rounded-none h-9 px-4"
+                      onClick={() => exportToCSV('inventory')}
+                      disabled={isExporting}
+                    >
+                      <Layers className="h-4 w-4 mr-2 text-teal-600" />
+                      Export Inventory
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start rounded-none h-9 px-4"
+                      onClick={() => exportToCSV('alerts')} 
+                      disabled={isExporting}
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2 text-amber-500" />
+                      Export Alerts Only
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
           </div>
           {selectedUnit && (
@@ -552,6 +856,7 @@ export default function MapPage({ units }: MapPageProps) {
             </CardDescription>
           )}
         </CardHeader>
+
         <CardContent className="p-0">
           {selectedUnit ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -581,11 +886,11 @@ export default function MapPage({ units }: MapPageProps) {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">Show</span>
-                        <Select value={entries} onValueChange={setEntries}>
+                        <Select value={entries} onValueChange={handleEntriesChange}>
                           <SelectTrigger className="w-16">
                             <SelectValue>{entries}</SelectValue>
                           </SelectTrigger>
-                          <SelectContent position="popper" align="start" sideOffset={4}>
+                          <SelectContent side="bottom" align="start" sideOffset={4}>
                             <SelectItem value="10">10</SelectItem>
                             <SelectItem value="25">25</SelectItem>
                             <SelectItem value="50">50</SelectItem>
@@ -596,21 +901,89 @@ export default function MapPage({ units }: MapPageProps) {
                       </div>
 
                       <div className="w-full sm:w-auto">
-                        <Select value={filterBy} onValueChange={setFilterBy}>
-                          <SelectTrigger className="w-full sm:w-[200px]">
-                            <SelectValue placeholder="Filter by..." />
-                          </SelectTrigger>
-                          <SelectContent position="popper" align="start" sideOffset={4}>
-                            <SelectItem value="all">All Items</SelectItem>
-                            <SelectItem value="expiryAsc">Expiry Date (Earliest First)</SelectItem>
-                            <SelectItem value="expiryDesc">Expiry Date (Latest First)</SelectItem>
-                            <SelectItem value="quantityAsc">Quantity (Low to High)</SelectItem>
-                            <SelectItem value="quantityDesc">Quantity (High to Low)</SelectItem>
-                            <SelectItem value="damaged">Damaged Items</SelectItem>
-                            <SelectItem value="expired">Expired Items</SelectItem>
-                            <SelectItem value="nearExpiry">Near Expiry (30 days)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full sm:w-[200px] justify-between">
+                              {filterBy === "all"
+                                ? "All Items"
+                                : filterBy === "expiryAsc"
+                                  ? "Expiry Date (Earliest First)"
+                                  : filterBy === "expiryDesc"
+                                    ? "Expiry Date (Latest First)"
+                                    : filterBy === "quantityAsc"
+                                      ? "Quantity (Low to High)"
+                                      : filterBy === "quantityDesc"
+                                        ? "Quantity (High to Low)"
+                                        : filterBy === "damaged"
+                                          ? "Damaged Items"
+                                          : filterBy === "expired"
+                                            ? "Expired Items"
+                                            : filterBy === "nearExpiry"
+                                              ? "Expiring Within 1 Year"
+                                              : "Filter by..."}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent side="bottom" align="start" className="w-[200px] p-0" sideOffset={5}>
+                            <div className="flex flex-col max-h-[300px] overflow-y-auto">
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("all")}
+                              >
+                                All Items
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("expiryAsc")}
+                              >
+                                Expiry Date (Earliest First)
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("expiryDesc")}
+                              >
+                                Expiry Date (Latest First)
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("quantityAsc")}
+                              >
+                                Quantity (Low to High)
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("quantityDesc")}
+                              >
+                                Quantity (High to Low)
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("damaged")}
+                              >
+                                Damaged Items
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("expired")}
+                              >
+                                Expired Items
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="justify-start rounded-none h-9"
+                                onClick={() => handleFilterChange("nearExpiry")}
+                              >
+                                Expiring Within 1 Year
+                              </Button>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
 
@@ -620,7 +993,7 @@ export default function MapPage({ units }: MapPageProps) {
                         placeholder="Search medicines..."
                         className="pl-8 w-full sm:w-[300px]"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => handleSearch(e.target.value)}
                       />
                     </div>
                   </div>
@@ -649,11 +1022,11 @@ export default function MapPage({ units }: MapPageProps) {
                               </span>
                             </TableCell>
                           </TableRow>
-                        ) : limitedStockData.length > 0 ? (
-                          limitedStockData.map((item) => (
+                        ) : stockData.length > 0 ? (
+                          stockData.map((item) => (
                             <TableRow key={item.id} className="hover:bg-gray-50">
                               <TableCell className="font-medium">{item.persediaan.namaPersediaan}</TableCell>
-                              <TableCell className="font-mono text-xs">{item.persediaan.kodePersediaan}</TableCell>
+                              <TableCell className="font-mono text-xs">{item.nusp}</TableCell>
                               <TableCell>{item.persediaan.tipe}</TableCell>
                               <TableCell className="text-right font-medium">
                                 {item.jumlah} {item.satuan.satuan}
@@ -684,14 +1057,54 @@ export default function MapPage({ units }: MapPageProps) {
                     </Table>
                   </div>
 
-                  {/* Pagination info */}
-                  <div className="text-sm text-muted-foreground">
-                    Showing {Math.min(limitedStockData.length, Number.parseInt(entries))} of {filteredStockData.length}{" "}
-                    items
+                  {/* Pagination controls */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {stockData.length} of {totalItems} items (Page {currentPage} of {totalPages})
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(1)}
+                        disabled={currentPage === 1 || isLoading}
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1 || isLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <div className="text-sm px-2">
+                        Page {currentPage} of {totalPages}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages || isLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(totalPages)}
+                        disabled={currentPage === totalPages || isLoading}
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </TabsContent>
 
+              {/* MODIFIED: Alerts tab with its own filters and pagination */}
               <TabsContent value="alerts" className="p-6">
                 <div className="space-y-4">
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -702,34 +1115,139 @@ export default function MapPage({ units }: MapPageProps) {
                     <p className="text-yellow-700 mt-1">Critical inventory issues that require attention</p>
                   </div>
 
-                  {isLoading ? (
+                  {/* Add filter controls for alerts tab */}
+                  <div className="flex flex-col sm:flex-row justify-between gap-4 bg-gray-50 p-4 rounded-lg">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Show</span>
+                        <Select 
+                          value={alertsPageSize.toString()} 
+                          onValueChange={handleAlertsEntriesChange}
+                          disabled={isLoadingAlerts}
+                        >
+                          <SelectTrigger className="w-16">
+                            <SelectValue>{alertsPageSize}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent side="bottom" align="start" sideOffset={4}>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="25">25</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm font-medium">alerts per page</span>
+                      </div>
+                    </div>
+                    
+                    <div className="w-full sm:w-auto">
+                      <Popover open={alertsFilterOpen} onOpenChange={setAlertsFilterOpen}>
+                        <PopoverTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            className="w-full sm:w-[200px] justify-between"
+                            disabled={isLoadingAlerts}
+                          >
+                            {alertsFilterBy === "all"
+                              ? "All Alerts"
+                              : alertsFilterBy === "expiryAsc"
+                                ? "Expiry Date (Earliest First)"
+                                : alertsFilterBy === "expiryDesc"
+                                  ? "Expiry Date (Latest First)"
+                                  : alertsFilterBy === "quantityAsc"
+                                    ? "Quantity (Low to High)"
+                                    : alertsFilterBy === "quantityDesc"
+                                      ? "Quantity (High to Low)"
+                                      : alertsFilterBy === "damaged"
+                                        ? "Damaged Items"
+                                        : alertsFilterBy === "expired"
+                                          ? "Expired Items"
+                                          : alertsFilterBy === "nearExpiry"
+                                            ? "Expiring Within 1 Year"
+                                            : "Filter by..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent side="bottom" align="start" className="w-[200px] p-0" sideOffset={5}>
+                          <div className="flex flex-col max-h-[300px] overflow-y-auto">
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("all")}
+                            >
+                              All Alerts
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("expiryAsc")}
+                            >
+                              Expiry Date (Earliest First)
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("expiryDesc")}
+                            >
+                              Expiry Date (Latest First)
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("quantityAsc")}
+                            >
+                              Quantity (Low to High)
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("quantityDesc")}
+                            >
+                              Quantity (High to Low)
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("damaged")}
+                            >
+                              Damaged Items
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("expired")}
+                            >
+                              Expired Items
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="justify-start rounded-none h-9"
+                              onClick={() => handleAlertsFilterChange("nearExpiry")}
+                            >
+                              Expiring Within 1 Year
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  {isLoadingAlerts ? (
                     <div className="flex items-center justify-center h-[200px]">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                       <span className="ml-2 text-sm text-muted-foreground">Loading alerts...</span>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {stockData.filter(
-                        (item) =>
-                          (item.tanggalExpired && new Date(item.tanggalExpired) <= new Date()) ||
-                          item.jumlah < 5 ||
-                          item.rusakRingan + item.rusakBerat + item.usang + item.hilang > 0,
-                      ).length > 0 ? (
-                        stockData
-                          .filter(
-                            (item) =>
-                              (item.tanggalExpired && new Date(item.tanggalExpired) <= new Date()) ||
-                              item.jumlah < 5 ||
-                              item.rusakRingan + item.rusakBerat + item.usang + item.hilang > 0,
-                          )
-                          .map((item) => (
+                      {allAlertsData.length > 0 ? (
+                        <>
+                          {/* Use paginated alerts data */}
+                          {paginatedAlertsData.map((item) => (
                             <Card key={item.id} className="border-l-4 border-l-red-500">
                               <CardContent className="p-4">
                                 <div className="flex justify-between items-start">
                                   <div>
                                     <h4 className="font-bold">{item.persediaan.namaPersediaan}</h4>
                                     <p className="text-sm text-gray-500">
-                                      {item.persediaan.kodePersediaan} • {item.persediaan.tipe}
+                                      {item.nusp} • {item.persediaan.tipe}
                                     </p>
                                   </div>
                                   {getStockStatusBadge(item)}
@@ -754,7 +1272,53 @@ export default function MapPage({ units }: MapPageProps) {
                                 </div>
                               </CardContent>
                             </Card>
-                          ))
+                          ))}
+                          
+                          {/* Pagination controls for alerts */}
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+                            <div className="text-sm text-muted-foreground">
+                              Showing {Math.min(alertsPageSize, allAlertsData.length - (alertsCurrentPage - 1) * alertsPageSize)} of {allAlertsData.length} alerts (Page {alertsCurrentPage} of {alertsTotalPages})
+                            </div>
+                            
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAlertsPageChange(1)}
+                                disabled={alertsCurrentPage === 1}
+                              >
+                                <ChevronsLeft className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAlertsPageChange(alertsCurrentPage - 1)}
+                                disabled={alertsCurrentPage === 1}
+                              >
+                                <ChevronLeft className="h-4 w-4" />
+                              </Button>
+                              <div className="text-sm px-2">
+                                Page {alertsCurrentPage} of {alertsTotalPages || 1}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAlertsPageChange(alertsCurrentPage + 1)}
+                                disabled={alertsCurrentPage === alertsTotalPages || alertsTotalPages === 0}
+                              >
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAlertsPageChange(alertsTotalPages)}
+                                disabled={alertsCurrentPage === alertsTotalPages || alertsTotalPages === 0}
+                              >
+                                <ChevronsRight className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </>
                       ) : (
                         <div className="text-center py-8 text-gray-500">
                           <p>No critical alerts found for this unit</p>

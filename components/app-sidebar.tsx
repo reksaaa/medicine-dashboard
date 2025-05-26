@@ -8,7 +8,7 @@ import { signOut } from "next-auth/react";
 const menuItems = [
   { name: "Dashboard", icon: LayoutGrid, href: "/dashboard" },
   { name: "Map", icon: Map, href: "/dashboard/map" },
-  { name: "Stock Forecast", icon: BarChart2, href: "/stock-forecast" },
+  { name: "Stock Forecast", icon: BarChart2, href: "/dashboard/forecasting" },
   { name: "Disease Trend", icon: Activity, href: "/disease-trend" },
 ];
 

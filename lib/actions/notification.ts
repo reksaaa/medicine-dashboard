@@ -27,12 +27,12 @@ export async function getNotifications(unitId?: number, limit?: number) {
     const oneMonthAgo = new Date()
     oneMonthAgo.setMonth(currentDate.getMonth() - 1)
 
-    // 1. Low stock warnings
+    // 1. Low stock warnings - Remove the take: 10 limit
     const lowStockItems = await prisma.stokOpname.findMany({
       where: {
         ...(unitId ? { unitId } : {}),
         jumlah: {
-          lt: 10, // Arbitrary threshold for demonstration
+          lt: 100, // Use our standard threshold of 100
         },
       },
       include: {
@@ -47,10 +47,10 @@ export async function getNotifications(unitId?: number, limit?: number) {
           },
         },
       },
-      take: 10,
+      // No limit here - get all low stock items
     })
 
-    lowStockItems.forEach((item, index) => {
+    lowStockItems.forEach((item) => {
       notifications.push({
         id: `low-stock-${item.id}`,
         title: "Low Stock Warning",
@@ -65,16 +65,17 @@ export async function getNotifications(unitId?: number, limit?: number) {
       })
     })
 
-    // 2. Expiring medicines
-    const thirtyDaysFromNow = new Date()
-    thirtyDaysFromNow.setDate(currentDate.getDate() + 30)
+    // 2. Expiring medicines - Remove the take: 20 limit
+    // First, get all expiring medicines within the next year
+    const oneYearFromNow = new Date()
+    oneYearFromNow.setFullYear(currentDate.getFullYear() + 1)
 
     const expiringItems = await prisma.stokOpname.findMany({
       where: {
         ...(unitId ? { unitId } : {}),
         tanggalExpired: {
           gte: currentDate,
-          lte: thirtyDaysFromNow,
+          lte: oneYearFromNow, // Look for items expiring within a year
         },
       },
       include: {
@@ -89,17 +90,39 @@ export async function getNotifications(unitId?: number, limit?: number) {
           },
         },
       },
-      take: 10,
+      // No limit here - get all expiring items
     })
 
     expiringItems.forEach((item) => {
-      const daysRemaining = Math.ceil((item.tanggalExpired!.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))
+      if (!item.tanggalExpired) return // Skip if no expiry date
+
+      const daysRemaining = Math.ceil((item.tanggalExpired.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))
+
+      // Determine notification type based on urgency
+      let notificationType: "warning" | "error" = "warning"
+      let title = "Expiring Medicine"
+
+      // If expiring within 30 days, mark as error (high priority)
+      if (daysRemaining <= 30) {
+        notificationType = "error"
+        title = "Medicine Expiring Soon"
+      }
+
+      // Check if this item is also low in stock
+      const isLowStock = item.jumlah < 100
+
+      // If both low stock and expiring soon, make it a special notification
+      if (isLowStock && daysRemaining <= 30) {
+        title = "Critical: Low Stock & Expiring Soon"
+      } else if (isLowStock) {
+        title = "Low Stock & Expiring"
+      }
 
       notifications.push({
         id: `expiring-${item.id}`,
-        title: "Expiring Medicine",
-        message: `${item.persediaan.namaPersediaan} will expire in ${daysRemaining} days in ${item.unit.namaUnit}`,
-        type: "error",
+        title: title,
+        message: `${item.persediaan.namaPersediaan} will expire in ${daysRemaining} days in ${item.unit.namaUnit}${isLowStock ? ` (only ${item.jumlah} remaining)` : ""}`,
+        type: notificationType,
         isRead: Math.random() > 0.7, // Randomly mark some as read
         createdAt: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)), // Random date within last month
         unitId: item.unitId,
@@ -109,7 +132,7 @@ export async function getNotifications(unitId?: number, limit?: number) {
       })
     })
 
-    // 3. Recent receipts
+    // 3. Recent receipts - Remove the take: 10 limit
     const recentReceipts = await prisma.penerimaan.findMany({
       where: {
         ...(unitId ? { unitId } : {}),
@@ -133,7 +156,7 @@ export async function getNotifications(unitId?: number, limit?: number) {
           },
         },
       },
-      take: 10,
+      // No limit here - get all recent receipts
     })
 
     recentReceipts.forEach((receipt) => {
@@ -155,7 +178,7 @@ export async function getNotifications(unitId?: number, limit?: number) {
       })
     })
 
-    // 4. Recent dispensing
+    // 4. Recent dispensing - Remove the take: 10 limit
     const recentDispensing = await prisma.pengeluaran.findMany({
       where: {
         ...(unitId ? { unitId } : {}),
@@ -179,7 +202,7 @@ export async function getNotifications(unitId?: number, limit?: number) {
           },
         },
       },
-      take: 10,
+      // No limit here - get all recent dispensing
     })
 
     recentDispensing.forEach((dispensing) => {
@@ -209,7 +232,8 @@ export async function getNotifications(unitId?: number, limit?: number) {
     // Sort notifications by date (newest first)
     filteredNotifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    // Apply limit if provided
+    // Apply limit only if explicitly provided by the caller
+    // This allows components to decide if they want to limit or not
     const limitedNotifications = limit ? filteredNotifications.slice(0, limit) : filteredNotifications
 
     return {
@@ -269,16 +293,18 @@ export async function markAllNotificationsAsRead(unitId?: number) {
 export async function getReadNotifications() {
   try {
     // In a real application, you would fetch this from the database
-    // For now, we'll return an empty array since we're simulating
+    // For now, we'll return an object with a payload property containing an empty array
     return {
       success: true,
       data: [],
+      payload: {}, // Add this empty object as the payload
     }
   } catch (error) {
     console.error("Error fetching read notifications:", error)
     return {
       success: false,
       error: `Failed to fetch read notifications: ${error instanceof Error ? error.message : "Unknown error"}`,
+      payload: {}, // Add a default payload even in error cases
     }
   }
 }

@@ -12,6 +12,7 @@ interface UnitStockHistoryChartProps {
 interface StockData {
   month: string
   value: number
+  dispensed: number // Added to track dispensed medicine
 }
 
 export function UnitStockHistoryChart({ unitId }: UnitStockHistoryChartProps) {
@@ -54,7 +55,10 @@ export function UnitStockHistoryChart({ unitId }: UnitStockHistoryChartProps) {
       return (
         <div className="bg-background p-2 border rounded-md shadow-sm">
           <p className="font-medium">{label}</p>
-          <p className="text-sm">{`Stock: ${payload[0].value}`}</p>
+          <p className="text-sm text-green-600">{`Total Stock: ${payload[0].value}`}</p>
+          {payload.length > 1 && (
+            <p className="text-sm text-blue-600">{`Dispensed: ${payload[1].value}`}</p>
+          )}
         </div>
       )
     }
@@ -67,47 +71,57 @@ export function UnitStockHistoryChart({ unitId }: UnitStockHistoryChartProps) {
   }
 
   return (
-    <Card className="h-full">
-      <CardHeader>
+    <Card className="h-full flex flex-col">
+      <CardHeader className="pb-2">
         <CardTitle>Stock History</CardTitle>
         <CardDescription>Stock level changes over the past 6 months</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 flex flex-col">
         {isLoading ? (
-          <div className="flex items-center justify-center h-[300px]">
+          <div className="flex items-center justify-center flex-1">
             <p>Loading chart data...</p>
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center h-[300px] text-red-500">
+          <div className="flex items-center justify-center flex-1 text-red-500">
             <p>{error}</p>
           </div>
         ) : stockData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart
-              data={stockData}
-              margin={{
-                top: 5,
-                right: 30,
-                left: 20,
-                bottom: 5,
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip content={<CustomTooltip />} />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#4ade80"
-                activeDot={{ r: 8 }}
-                name="Stock Quantity"
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={stockData}
+                margin={{
+                  top: 5,
+                  right: 30,
+                  left: 20,
+                  bottom: 5,
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip content={<CustomTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#4ade80"
+                  activeDot={{ r: 8 }}
+                  name="Total Stock"
+                  strokeWidth={2}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="dispensed"
+                  stroke="#60a5fa"
+                  activeDot={{ r: 6 }}
+                  name="Dispensed"
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
-          <div className="flex items-center justify-center h-[300px]">
+          <div className="flex items-center justify-center flex-1">
             <p className="text-muted-foreground">No data available</p>
           </div>
         )}
