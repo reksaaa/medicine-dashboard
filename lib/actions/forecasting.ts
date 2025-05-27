@@ -1,10 +1,9 @@
 "use server"
 
 import type { ForecastResult, Unit, Medicine } from "@/lib/forecasting/types"
-import prisma from "@/lib/prisma"
 
 // Use only localhost:8000 since that works for units/medicines
-const PYTHON_API_URLS = ["http://localhost:8000"]
+const PYTHON_API_URLS = ["http://127.0.0.1:8000"]
 
 async function tryPythonAPI(endpoint: string, options: RequestInit = {}): Promise<Response | null> {
   for (const baseUrl of PYTHON_API_URLS) {
@@ -69,53 +68,19 @@ export async function testPythonConnection(): Promise<{ success: boolean; messag
 
 export async function getAvailableUnits(): Promise<{ success: boolean; data?: Unit[]; error?: string }> {
   try {
-    console.log("Fetching units from Python API...")
+    const response = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/forecasting/units`)
 
-    const response = await tryPythonAPI("/api/forecast/units")
-
-    if (!response) {
-      console.log("Python API not available, using database fallback")
-      throw new Error("Python API not reachable")
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
     const result = await response.json()
-    console.log("Units fetched successfully from Python API:", result.data?.length || 0, "units")
     return result
   } catch (error) {
-    console.error("Python API failed, using database fallback:", error)
-
-    // Fallback to direct database query
-    try {
-      console.log("Using database fallback for units...")
-      const units = await prisma.unit.findMany({
-        where: {
-          penerimaan: {
-            some: {
-              rincianPenerimaan: {
-                some: {},
-              },
-            },
-          },
-        },
-        select: {
-          id: true,
-          namaUnit: true,
-          kodeUnit: true,
-        },
-        distinct: ["id"],
-      })
-
-      console.log("Database fallback successful:", units.length, "units")
-      return {
-        success: true,
-        data: units,
-      }
-    } catch (dbError) {
-      console.error("Database fallback failed:", dbError)
-      return {
-        success: false,
-        error: "Failed to fetch units from both API and database",
-      }
+    console.error("Error fetching units:", error)
+    return {
+      success: false,
+      error: "Failed to fetch units",
     }
   }
 }
@@ -124,51 +89,21 @@ export async function getUnitMedicines(
   unitId: number,
 ): Promise<{ success: boolean; data?: Medicine[]; error?: string }> {
   try {
-    console.log("Fetching medicines for unit", unitId, "from Python API")
+    const response = await fetch(
+      `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/forecasting/medicines/${unitId}`,
+    )
 
-    const response = await tryPythonAPI(`/api/forecast/units/${unitId}/medicines`)
-
-    if (!response) {
-      console.log("Python API not available, using database fallback")
-      throw new Error("Python API not reachable")
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
     const result = await response.json()
-    console.log("Medicines fetched successfully from Python API:", result.data?.length || 0, "medicines")
     return result
   } catch (error) {
-    console.error("Python API failed, using database fallback:", error)
-
-    // Fallback to direct database query
-    try {
-      console.log("Using database fallback for medicines...")
-      const medicines = await prisma.persediaan.findMany({
-        where: {
-          rincianPenerimaan: {
-            some: {
-              unitId: unitId,
-            },
-          },
-        },
-        select: {
-          id: true,
-          namaPersediaan: true,
-          kodePersediaan: true,
-        },
-        distinct: ["id"],
-      })
-
-      console.log("Database fallback successful:", medicines.length, "medicines")
-      return {
-        success: true,
-        data: medicines,
-      }
-    } catch (dbError) {
-      console.error("Database fallback failed:", dbError)
-      return {
-        success: false,
-        error: "Failed to fetch medicines from both API and database",
-      }
+    console.error("Error fetching medicines:", error)
+    return {
+      success: false,
+      error: "Failed to fetch medicines",
     }
   }
 }
@@ -197,24 +132,15 @@ export async function generateForecast(unitId: number, medicineId: number, perio
 
     console.log("Python API and database are available, proceeding with ARIMA/SARIMA forecast...")
 
-    const response = await tryPythonAPI(
-      `/api/forecast/generate?unit_id=${unitId}&medicine_id=${medicineId}&periods=${periods}`,
-      { method: "POST" },
-    )
+    const response = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/forecasting/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unitId, medicineId, periods }),
+    })
 
-    if (!response) {
-      return {
-        success: false,
-        unit_id: unitId,
-        medicine_id: medicineId,
-        model_type: "",
-        model_parameters: { p: 0, d: 0, q: 0, seasonal_P: 0, seasonal_D: 0, seasonal_Q: 0, seasonal_m: 0 },
-        historical_data: [],
-        forecast_data: [],
-        summary: { total_forecast: 0, avg_monthly: 0, historical_avg: 0, data_points: 0, forecast_period: 0 },
-        recommendations: { safety_stock: 0, reorder_point: 0, lead_time_months: 0, service_level: "" },
-        error: "Python API not reachable for forecast generation.",
-      }
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || `HTTP ${response.status}`)
     }
 
     const result = await response.json()
@@ -251,7 +177,7 @@ export async function generateForecast(unitId: number, medicineId: number, perio
       forecast_data: [],
       summary: { total_forecast: 0, avg_monthly: 0, historical_avg: 0, data_points: 0, forecast_period: 0 },
       recommendations: { safety_stock: 0, reorder_point: 0, lead_time_months: 0, service_level: "" },
-      error: `Forecast generation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      error: error instanceof Error ? error.message : "Unknown error",
     }
   }
 }
